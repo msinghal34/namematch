@@ -1,0 +1,8 @@
+# JitPack (https://jitpack.io) builds the Java library from a Git tag the first time someone asks for it:
+#   repositories { maven { url 'https://jitpack.io' } }
+#   dependencies { implementation 'com.github.msinghal34:namematch:v0.4.0' }
+# The official channel is Maven Central (io.github.msinghal34:namematch); see README.md.
+jdk:
+  - openjdk11
+install:
+  - cd java && mvn -B -q install -DskipTests

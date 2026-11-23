@@ -1,0 +1,37 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # every version reports, not just the first to fail
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install pytest
+      - run: python -m pytest -q
+        working-directory: python
+
+  java:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # every version reports, not just the first to fail
+      matrix:
+        java: ["11", "17", "21"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      # The conformance test holds Java to every Python result in conformance/cases.jsonl.
+      - run: mvn -B verify
+        working-directory: java

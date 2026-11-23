@@ -1,0 +1,150 @@
+# Rule data for namematch. Everything here is lowercase Latin, after transliteration.
+# Changing this file changes scores: measure the change on labelled pairs and bump `version`.
+# The Python and Java libraries both read this file.
+
+version = "0.4.0"
+
+# Titles dropped wherever they lead a person (repeatable: "Mr.Dr.", "Surg Lt Cdr").
+honorifics = [
+  "sri", "shri", "shree", "sree", "srii", "sh", "smt", "shrimati", "srimati", "shreemati", "sreemathi",
+  "smti", "mr", "mrs", "ms", "miss", "mister", "master", "kum", "kumari", "dr", "doctor", "late", "lt",
+  "prof", "adv", "advocate", "er", "capt", "captain", "col", "colonel", "maj", "major", "gen", "brig",
+  "cdr", "surg", "wg", "sqn", "ldr", "cmde", "hon", "janab", "haji", "hajee", "mohtarma", "rev",
+  "fr", "sister", "thiru", "thirumathi", "tmt", "selvi", "ku", "kumaari", "baby", "divangatha", "divangata",
+  "shreemathi", "shrimathi", "sreemati", "daa", "daaktar", "chiranjeevi", "father",
+]
+# Female / male markers among the honorifics (used only for gender evidence).
+female_honorifics = ["shreemathi", "shrimathi", "sreemati", "smt", "shrimati", "srimati", "shreemati", "sreemathi", "smti", "mrs", "ms", "miss", "kum", "kumari", "mohtarma", "thirumathi", "tmt", "selvi"]
+male_honorifics = ["mr", "mister", "janab", "thiru"]
+
+# A relation marker starts a clause naming a relative (not the person).
+# Value is the gender it implies for the person before it ("" = none).
+[relations]
+"s/o" = "m"
+"d/o" = "f"
+"w/o" = "f"
+"h/o" = "m"
+"c/o" = ""
+"son of" = "m"
+"daughter of" = "f"
+"wife of" = "f"
+"husband of" = "m"
+"bin" = "m"
+"binti" = "f"
+"bint" = "f"
+"kom" = "f"
+"kon" = "f"
+"father name" = ""
+"guardian" = ""
+
+[lists]
+# A clause naming someone acting for the owner; that someone is not the owner.
+representation = [
+  "rep by", "represented by", "rep. by", "r/by", "r/b", "repby", "through", "thru",
+  "gpa holder", "spa holder", "power of attorney", "pa holder", "poa holder", "gpa",
+  "rep", "authorised signatory", "authorized signatory", "managing partner", "managing partners",
+  "managing director", "director", "proprietor", "partner", "rept by", "rept", "guardian",
+  "natural guardian", "minor guardian", "gurdian", "gardian", "gardiyan", "gartiyan", "manager", "president",
+  "secretary", "chairman", "trustee", "trustees", "karta",
+  # Kannada words written in English letters by the Draft Khata digitisers.
+  "paravagi", "paravaagi", "pratinidhi", "prathinidhi", "adhyaksharu", "adhyakshar", "myanejar", "kaaryadarshi",
+  "karyadarshi", "mukhantara", "mulaka",
+]
+# Introduce another name for the same person.
+alias = ["alias", "aliyas", "aliyaas", "@", "urf", "urfu", "uruf", "a/k/a", "aka", "also known as"]
+# Separators between owners besides punctuation.
+joiners = ["and", "an", "&", "+", "with"]
+# Trailing noise.
+trailing = ["and others", "& others", "others", "etc", "and family", "legal heirs", "lrs", "l.rs"]
+
+# Words that make a segment an organisation rather than a person.
+org_words = [
+  "m/s", "pvt", "private", "ltd", "limited", "llp", "inc", "corp", "corporation", "company", "co-op",
+  "cooperative", "co-operative", "developers", "developer", "developments", "constructions",
+  "construction", "builders", "estates", "estate", "properties", "property", "infra", "infrastructure",
+  "projects", "realty", "realtors", "housing", "homes", "ventures", "enterprises", "industries", "mills",
+  "trust", "society", "association", "sangha", "samithi", "samiti", "temple", "devasthana", "church",
+  "mosque", "masjid", "dargah", "wakf", "waqf", "board", "bank", "foundation", "group", "holdings",
+  "hospital", "school", "college", "institute", "huf", "firm", "traders", "agencies", "exports",
+  "technologies", "solutions", "services", "bbmp", "bda", "government", "govt", "karnataka",
+  "burial", "ground", "committee", "club", "federation", "union", "organisation", "organization",
+  "charities", "charity", "charitable", "products", "works", "stores", "agency", "motors", "textiles", "chemicals",
+  # Kannada-English spellings from Draft Khata.
+  "kampani", "kampeni", "bildars", "bildarsu", "bildir", "bildirs", "bilders", "treding", "tredars", "estet",
+  "praivet", "praivet", "limited", "limitedu", "praiveta", "korporeshan", "sosaiti", "sangh", "injiniyaring",
+]
+# Dropped from organisation names before comparing.
+org_noise = ["m/s", "pvt", "private", "ltd", "limited", "llp", "inc", "the", "co", "company", "india", "indian", "p", "rep", "by", "its",
+  "praivet", "praiveta", "prai", "li", "limitedu", "kampani", "kampeni", "plc"]
+
+# A segment consisting only of these words names nobody.
+placeholders = ["khali", "vacant", "nil", "null", "na", "none", "unknown", "holder", "lessee", "lesee", "leesee", "owner", "khatedar", "occupant", "tenant", "not", "available", "applicant"]
+
+[gender]
+# Name-final suffixes: a female suffix against the male suffix on the same stem is a conflict.
+pairs = [
+  ["appa", "amma"], ["ayya", "amma"], ["aiah", "amma"], ["aiya", "amma"], ["anna", "amma"],
+  ["kumar", "kumari"], ["eshwar", "eshwari"], ["eswar", "eswari"], ["deva", "devi"], ["ar", "ari"], ["an", "ani"],
+]
+# Endings only one gender takes; used when the records give no evidence for a name.
+female_suffixes = ["amma", "kumari", "devi", "bai", "begum", "eshwari", "eswari", "vathi", "vati", "lakshmi", "laxmi", "rani", "ben", "kaur"]
+male_suffixes = ["appa", "ayya", "aiah", "kumar", "swamy", "swami", "eshwar", "eswar"]
+
+[variants]
+# Each group spells one name; members compare as identical. Write them in phonetic-key-free form.
+groups = [
+  ["mohammed", "mohammad", "mohamed", "mohamad", "muhammad", "muhammed", "mohd", "md", "mahamad", "mahammad", "mohmed", "mahmad"],
+  ["syed", "sayed", "sayyed", "sayyad", "saiyad", "saiyed", "sayeed", "seyed"],
+  ["sheikh", "shaikh", "shaik", "sheik", "shek", "shaikh"],
+  ["abdul", "abdool", "abd"],
+  ["lakshmi", "laxmi", "lakshmee", "lakhmi", "luxmi"],
+  ["venkatesh", "venkatesha", "venkatesan"],
+  ["narayana", "narayan", "narayanan"],
+  ["poornima", "purnima"],
+  ["fathima", "fatima", "phathima"],
+  ["ahmed", "ahmad", "ahamed", "ahamad"],
+  ["ali", "aly"],
+  ["hussain", "husain", "hussen", "hussein", "husen"],
+  ["joseph", "josef"],
+  ["mary", "mery", "meri", "meeri", "merry"],
+  ["thomas", "tomas"],
+  ["krishna", "krushna", "kishna"],
+  ["vishnu", "visnu"],
+  ["ganesh", "ganesha"],
+  ["kumar", "kumaar"],
+  ["reddy", "reddi"],
+  ["gowda", "gouda", "gauda"],
+  ["murthy", "murty", "murthi", "moorthy", "murti", "moorthi"],
+  ["swamy", "swami", "svami", "swamee"],
+  ["iyer", "aiyar", "ayyar"],
+  ["iyengar", "ayyangar", "iyangar"],
+  ["naidu", "nayudu"],
+  ["shetty", "setty", "shetti", "chetty", "chetti"],
+  ["prasad", "prasada", "prashad"],
+  ["babu", "baboo"],
+  ["sharma", "sarma"],
+  ["jain", "jaine"],
+  ["chandra", "chander", "chandar"],
+  ["jagadish", "jagadeesh", "jagdish", "jagdeesh", "jagadeesha"],
+  ["vijaya", "vijay"],
+  ["sandhya", "sandya"],
+  ["shashi", "sasi", "sashi"],
+  ["shankar", "sankar", "shanker", "sanker"],
+  ["subramanya", "subramanyam", "subrahmanya", "subramaniam", "subramanian", "subramani", "subbramanya"],
+  ["yashoda", "yasoda"],
+  ["anand", "ananda", "anandh"],
+  ["ramesh", "ramesha"],
+  ["suresh", "suresha"],
+  ["sharada", "sarada", "sharadha"],
+  ["savitha", "savita", "sabitha"],
+  ["vasanth", "vasant", "basanth", "basant"],
+  ["rao", "rav", "rau", "raw"],
+  ["pasha", "basha", "baasha", "bhasha"],
+  ["urs", "arasu", "aras", "arasa"],
+  ["christy", "kristi", "christi", "kristy"],
+  ["engineering", "injiniyaring", "enjineering"],
+  ["trading", "treding"],
+  ["builders", "bildars", "bildir", "bildirs", "bilders", "bildarsu"],
+  ["estate", "estates", "estet"],
+  ["developers", "developer", "developars", "divelapars"],
+]

@@ -1,0 +1,29 @@
+[project]
+name = "namematch"
+version = "0.4.0"
+description = "Rule-based person-name matching for Indian (Karnataka) property and identity records"
+license = { text = "MIT" }
+readme = "README.md"
+authors = [{ name = "Mayank Singhal" }]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/msinghal34/namematch"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+namematch = ["rules.toml", "token_freq.tsv", "name_gender.tsv"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
