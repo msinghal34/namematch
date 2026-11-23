@@ -40,13 +40,6 @@ r.isAccepted();  // false: only Band.SAME (0.80 and above) is safe to accept aut
 r.reasons();     // [kumr~kumar 0.86, extra: gowda]
 ```
 
-Or from [JitPack](https://jitpack.io), which builds the library straight from this repository's tags:
-
-```groovy
-repositories { maven { url 'https://jitpack.io' } }
-dependencies { implementation 'com.github.msinghal34:namematch:v0.4.0' }
-```
-
 All methods are thread-safe, and results are immutable.
 
 ## Python
