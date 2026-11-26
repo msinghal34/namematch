@@ -10,29 +10,26 @@ import math
 from dataclasses import dataclass, field
 
 from .parse import Organisation, ParsedName, Person, Token, parse
-from .phonetic import cross_gender_conflict, cross_similarity, cross_vowels_only, gender_conflict, gender_of, initial_of, key, near_miss, similarity
-from .rules import TOKEN_FREQ, TOKEN_FREQ_EAASTHI, TOKEN_PERSONS, TOKEN_PERSONS_EAASTHI
+from .phonetic import cross_gender_conflict, cross_similarity, gender_conflict, gender_key, gender_of, initial_of, key, similarity, vowel_slip
+from .rules import NAME_GENDER, TOKEN_FREQ, TOKEN_PERSONS
 from .switches import ON
 
 MATCH_FLOOR = 0.70          # token similarity below this is "not the same word"
-NEAR_SIM = 0.75             # a near-miss word (one letter slip in a short name) when it is allowed
+NEAR_SIM = 0.75             # a vowel-slip word (same consonants, vowels differ) when it is allowed
 NEAR_CAP = 0.64             # ... and the most such a pair can score: "needs a check", never accepted
+INITIAL_CONFLICT = 0.6      # per pair of initials that disagree: the same given name with another father
+CARRIED_CAP = 0.6           # her name in front of his (Rekha Mahesh Kulkarni / Mahesh Kulkarni): a relative
 # A part counts as common from 25 sightings per 153,218 persons: the sample the weights were tuned on.
 _COMMON_RATE = 25 / 153_218
 
 
-_TABLES = {}
+_COMMON = _COMMON_RATE * TOKEN_PERSONS if TOKEN_PERSONS else 25
+_TOP = max(TOKEN_FREQ.values(), default=1)
 
 
 def _table():
-    """(counts, 'common' threshold, largest count) of the table the eaasthi_weights switch picks; worked
-    out once per table, not per word."""
-    use = bool(ON["eaasthi_weights"] and TOKEN_FREQ_EAASTHI)
-    if use not in _TABLES:
-        freq, persons = (TOKEN_FREQ_EAASTHI, TOKEN_PERSONS_EAASTHI) if use else (TOKEN_FREQ, TOKEN_PERSONS)
-        common = _COMMON_RATE * persons if persons else 25
-        _TABLES[use] = (freq, common, max(freq.values(), default=1))
-    return _TABLES[use]
+    """(counts, 'common' threshold, largest count) of the frequency table."""
+    return TOKEN_FREQ, _COMMON, _TOP
 
 
 # Bands, calibrated on a labelled development set of name pairs.
@@ -126,7 +123,6 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
     ua, ub = _units(a), _units(b)
     candidates = []
     near_pairs = set()
-    vowel_pairs = set()         # Kannada vs English words with only the vowels different (cross_vowels_only)
     for x in ua:
         for y in ub:
             if len(x.idx) > 1 and len(y.idx) > 1:
@@ -135,13 +131,12 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
             s = _similar(x.text, x.kn, y.text, y.kn, recorded)
             if s < MATCH_FLOOR and near and len(x.idx) == 1 and len(y.idx) == 1:
                 latin_gender = gender_of(y.text if x.kn else x.text)
-                if near_miss(x.text, y.text):
+                # Across scripts only with cross_script, and never against the gender the Kannada record states.
+                cross = x.kn != y.kn
+                if (not cross or (ON["cross_script"] and not (recorded and latin_gender and latin_gender != recorded))) \
+                        and vowel_slip(x.text, y.text, x.kn and cross, y.kn and cross):
                     s = NEAR_SIM
                     near_pairs.add((x.text, y.text))
-                elif ON["cross_script"] and x.kn != y.kn and not (recorded and latin_gender and latin_gender != recorded) and (
-                        cross_vowels_only(x.text, y.text) if x.kn else cross_vowels_only(y.text, x.text)):
-                    s = NEAR_SIM
-                    vowel_pairs.add((x.text, y.text))
             if s >= MATCH_FLOOR:
                 candidates.append((s, len(x.idx) + len(y.idx), x, y))
     candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
@@ -157,9 +152,7 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
         matched_mass += s * w
         matched_w += w
         if (x.text, y.text) in near_pairs:
-            reasons.append(f"{x.text}?{y.text} one letter apart")
-        elif (x.text, y.text) in vowel_pairs:
-            reasons.append(f"{x.text}?{y.text} vowels differ across scripts")
+            reasons.append(f"{x.text}?{y.text} vowels differ")
         elif x.text != y.text:
             reasons.append(f"{x.text}~{y.text} {s:.2f}")
 
@@ -245,7 +238,7 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
     elif extra:
         reasons.append("extra: " + " ".join([a[i].text for i in free_a] + [b[j].text for j in free_b]))
     if init_conflicts:
-        score *= 0.75 ** init_conflicts
+        score *= INITIAL_CONFLICT ** init_conflicts
         reasons.append(f"initials differ ({init_conflicts})")
     if word_conflicts:
         # Milder when the given names (leading words) agree: 'Raghunandan B K' vs 'Raghunandan Venugopal Sharma'.
@@ -255,6 +248,23 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
     if gender_clash:
         score = min(score, 0.2)
         reasons.append("gender conflict")
+    if ON["carried_name"] and score > CARRIED_CAP:
+        # 'REKHA MAHESH KULKARNI' vs 'Mahesh Kulkarni', 'PRIYA ARVIND' vs 'ARVIND P': a woman's own name,
+        # unmatched or only an initial's, in front of a man's name that matches the other side's given
+        # name. She carries her husband's or father's name; she is not him. Not when her name and the next
+        # word are together a man's name the records list: 'LAKSHMI NARAYANA' vs 'L NARAYANA' is one man
+        # (the records only, not an ending: Vandana + Nandkumar ends in -kumar but is no name).
+        for side, used, first, o_used, o_first in ((a, used_a, first_a, used_b, first_b), (b, used_b, first_b, used_a, first_a)):
+            if first is None or first in used or o_first is None or o_first not in o_used:
+                continue
+            nxt = next((i for i in range(first + 1, len(side)) if not side[i].initial), None)
+            if nxt is not None and NAME_GENDER.get(gender_key(side[first].text + side[nxt].text)) == "m":
+                continue
+            if gender_of(side[first].text) == "f" and gender_of((b if side is a else a)[o_first].text) != "f" \
+                    and any(gender_of(side[i].text) == "m" for i in used if not side[i].initial):
+                score = CARRIED_CAP
+                reasons.append(f"{side[first].text} carries a man's name: a relative")
+                break
     return score, reasons, info
 
 
@@ -285,6 +295,11 @@ def _relatives(p: Person, q: Person, score: float, reasons: list[str]) -> tuple[
             continue
         father = [t.text for t in y.relative if not t.initial]
         own = set(x.initials) - set(y.initials)
+        if ON["father_initial_fit"] and father and own and not any(i in initial_of(father[0]) for i in own):
+            # 'S Ganapati' vs 'GANAPATI SHENOY S/O RAMAPPA SHENOY': S. is Shenoy, a word y has, not the father.
+            # Not by the given name itself: in 'R RAMESH' vs 'RAMESH S/O GOPAL' the R is not Ramesh.
+            words = [t.text for t in y.tokens if not t.initial][1:]
+            own = {i for i in own if not any(i in initial_of(w) for w in words)}
         if father and own and not any(i in initial_of(father[0]) for i in own):
             return score * 0.75, reasons + [f"initials {' '.join(sorted(own)).upper()} do not fit father {father[0]}"]
     return score, reasons
@@ -296,16 +311,14 @@ def _variants(p: Person) -> list[list[Token]]:
 
 def person_score(p: Person, q: Person) -> tuple[float, list[str]]:
     score, reasons = _person_score(p, q, near=False)
-    # A pair the rules call different gets a second look allowing one-letter slips in short names
-    # (Praveen / Parvin, Manish / Munish). Such a pair goes to an officer, never to acceptance, and
-    # a pair the rules already score 0.35 or more is left exactly as it was.
-    if ON["near_miss"] and score < 0.35:
+    # A pair the rules call different gets a second look allowing words whose vowels differ
+    # (Praveen / Parvin, Sunil / Sunel, ಕೃತಿಕಾ / Kartik). Such a pair goes to an officer, never to
+    # acceptance, and a pair the rules already score 0.35 or more is left exactly as it was.
+    if ON["vowel_slip"] and score < 0.35:
         s2, r2 = _person_score(p, q, near=True)
         s2 = min(s2, NEAR_CAP)
-        if s2 > score and any("one letter apart" in r for r in r2):
-            return s2, r2 + ["one-letter slip: needs a check"]
-        if s2 > score and any("vowels differ across scripts" in r for r in r2):
-            return s2, r2 + ["spelling across scripts: needs a check"]
+        if s2 > score and any(r.endswith("vowels differ") for r in r2):
+            return s2, r2 + ["vowels differ: needs a check"]
     return score, reasons
 
 

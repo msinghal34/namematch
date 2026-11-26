@@ -27,10 +27,8 @@ def _load_freq(name: str) -> tuple[dict[str, int], int]:
     return out, persons
 
 
-# Two tables of how common each name part is: the original sample, and the eAasthi export
-# (1.2 million properties); the switch eaasthi_weights picks the second.
+# How common each name part is, counted over the eAasthi export (1.2 million properties).
 TOKEN_FREQ, TOKEN_PERSONS = _load_freq("token_freq.tsv")
-TOKEN_FREQ_EAASTHI, TOKEN_PERSONS_EAASTHI = _load_freq("token_freq_eaasthi.tsv")
 
 
 def _load_gender() -> dict[str, str]:

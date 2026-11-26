@@ -25,12 +25,12 @@ class NameMatchTest {
     }
 
     @Test
-    void oneLetterSlipGoesToReviewNeverAccepted() {
+    void vowelSlipGoesToReviewNeverAccepted() {
         MatchResult r = NameMatch.match("Praveen Kumar", "Parvin Kumar");
         assertEquals(0.64, r.score());
         assertEquals(Band.REVIEW, r.band());
         assertFalse(r.isAccepted());
-        assertTrue(r.reasons().contains("one-letter slip: needs a check"));
+        assertTrue(r.reasons().contains("vowels differ: needs a check"));
     }
 
     @Test
@@ -118,7 +118,7 @@ class NameMatchTest {
     void differentNamesWithTheSameConsonantsGoToReviewNotAccept() {
         MatchResult r = NameMatch.match("KARTIK", "ಕೃತಿಕಾ");
         assertEquals(Band.REVIEW, r.band());
-        assertTrue(r.reasons().contains("spelling across scripts: needs a check"));
+        assertTrue(r.reasons().contains("vowels differ: needs a check"));
     }
 
     @Test
@@ -126,5 +126,22 @@ class NameMatchTest {
         assertEquals(Band.DIFFERENT, NameMatch.match("MUNIYAPPA", "ಮುನಿಯಮ್ಮ").band());
         assertEquals(Band.DIFFERENT, NameMatch.match("ADITI", "ಆದಿತ್ಯ").band());
         assertEquals(Band.DIFFERENT, NameMatch.match("SHIVALINGAMMA", "ಶಿವಲಿಂಗಮ್").band());
+    }
+
+    @Test
+    void commaBetweenInitialsIsOneName() {
+        assertTrue(NameMatch.match("MEERA,K,BHAT", "Meera K Bhat").isAccepted());
+    }
+
+    @Test
+    void herNameBeforeHisIsARelative() {
+        MatchResult r = NameMatch.match("REKHA MAHESH KULKARNI", "Mahesh Kulkarni");
+        assertEquals(0.6, r.score());
+        assertEquals(Band.REVIEW, r.band());
+    }
+
+    @Test
+    void differingInitialsSitMidReview() {
+        assertEquals(0.6, NameMatch.match("Girish S", "Girish T").score());
     }
 }

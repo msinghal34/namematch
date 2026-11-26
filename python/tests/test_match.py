@@ -104,7 +104,6 @@ def test_v02_patterns(a, b):
     ("SRINIVASAN M", "M Srinivas"),
     ("MUNIYAPPAN", "Muniyappa"),
     ("RAMESH K", "RAMESH S/O KRISHNA"),     # initial fits the father
-    ("MS RAMESH", "M S RAMESH"),            # capitals: joined initials, not the title Ms
     ("ಶ್ರೀಮತಿ ಲಕ್ಷ್ಮಿ", "Lakshmi"),            # Kannada title
 ])
 def test_review_fixes_keep_true_matches(a, b):
@@ -165,12 +164,12 @@ def test_relative_does_not_turn_husband_into_wife():
     assert match("ASIF KHAN NAZIA BEGUM", "Nazia Begum W/o Asif Khan").score >= SAME
 
 
-def test_one_letter_slip_goes_to_review_never_accepted():
-    # v0.3.0 near_miss: short names one slip apart go to an officer instead of "different".
+def test_vowel_slip_goes_to_review_never_accepted():
+    # vowel_slip (v0.3.0 near_miss, generalised in v0.6.0): names whose vowels differ go to an officer.
     for a, b in [("Praveen", "Parvin"), ("Manish", "Munish"), ("MANISH KUMAR", "Munish Kumar"), ("Ramesh", "Rumesh")]:
         r = match(a, b)
         assert r.band == "review" and r.score <= 0.64, (a, b, r)
-        assert "one-letter slip: needs a check" in r.reasons
+        assert "vowels differ: needs a check" in r.reasons
     # Opposite genders stay different, and a real match is untouched.
     assert match("Mallappa", "Mallamma").band == "different"
     assert match("Salman", "Salma").band == "different"
@@ -271,3 +270,39 @@ def test_recorded_and_ending_genders_keep_names_apart(a, b):
 ])
 def test_matching_genders_still_match(a, b):
     assert match(a, b).score >= SAME, match(a, b)
+
+
+# v0.6.0 (names invented).
+def test_comma_between_initials_is_one_name():
+    assert match("MEERA,K,BHAT", "Meera K Bhat").score >= SAME
+    assert match("T,R,DINESH", "T R Dinesh").score >= SAME
+    # A comma between full names still separates owners.
+    assert match("RAMESH, SURESH", "Ramesh").partial
+
+
+def test_initial_explained_by_own_word_is_not_the_father():
+    assert match("GANAPATI SHENOY S/O RAMAPPA SHENOY", "S.Ganapati").score >= SAME
+
+
+def test_her_name_before_his_is_a_relative():
+    for a, b in [("REKHA MAHESH KULKARNI", "Mahesh Kulkarni"), ("PRIYA ARVIND", "ARVIND P"),
+                 ("Kavya Joseph Mathew", "JOSEPH MATHEW")]:
+        r = match(a, b)
+        assert REVIEW <= r.score < SAME, (a, b, r)
+    # His own extra name is not affected.
+    assert match("KISHORE RAO", "Kishore").score >= REVIEW
+
+
+def test_differing_initials_sit_mid_review():
+    r = match("Girish S", "Girish T")
+    assert REVIEW <= r.score <= 0.6, r
+
+
+def test_review_fixes_for_v060():
+    # The given name itself does not explain an initial that the father should: R is not Ramesh.
+    assert match("R RAMESH", "RAMESH S/O GOPAL").score < SAME
+    # An initial standing where her name would stand is his own first name: one man, not a relative.
+    assert match("LAKSHMI NARAYANA", "L NARAYANA").score >= SAME
+    assert match("UMA SHANKAR", "U Shankar").score >= SAME
+    # A comma never joins initials across a relation clause.
+    assert match("LAKSHMI W/O RAMESH,K,SURESH", "Suresh").score >= SAME

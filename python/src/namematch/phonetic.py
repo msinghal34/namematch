@@ -18,7 +18,6 @@ for group in RULES["variants"]["groups"]:
 
 # Ordered rewrites; each is (regex, replacement).
 _REWRITES = [
-    (r"^(shri|shree|sree|sri|shri)", "sri"),
     (r"ksh", "ks"),
     (r"x", "ks"),
     (r"q", "k"),
@@ -169,13 +168,6 @@ def gender_conflict(a: str, b: str) -> bool:
     ga, gb = gender_of(a), gender_of(b)
     if ga and gb and ga != gb and gender_key(a)[:3] == gender_key(b)[:3]:
         return True
-    # A name plus a final i / ee is the feminine form when the records do not say otherwise
-    # (jayanth / jayanthi, shankar / shankari).
-    for x, y in ((a, b), (b, a)):
-        gx, gy = gender_key(x), gender_key(y)
-        if gy == gx + "i" and gx[-1:] not in "aeiou" and (gender_of(x) or gender_of(y)) \
-                and gender_of(x) != gender_of(y):
-            return True
     for male, female in _PAIRS:
         for x, y in ((a, b), (b, a)):
             if x.endswith(male) and y.endswith(female):
@@ -219,26 +211,25 @@ def similarity(a: str, b: str) -> float:
     return round(best, 3)
 
 
-_VOWELS = set("aeiou")
 
 
-def near_miss(a: str, b: str) -> bool:
-    """Short names one letter-slip apart that the main test calls different: the same consonants in
-    the same order, and either one vowel swapped with the consonant beside it ('pravin' / 'parvin')
-    or one vowel changed ('manish' / 'munish'). Never across genders. Used only to send a pair to
-    an officer (score capped below 0.65), never to accept it: kamala / komal stay apart in the score
-    that decides acceptance."""
-    if gender_conflict(a, b):
-        return False
-    ka, kb = raw_key(a), raw_key(b)
-    if len(ka) != len(kb) or len(ka) < 4 or ka == kb or ka[0] != kb[0] or skeleton(ka) != skeleton(kb):
-        return False
-    diff = [i for i in range(len(ka)) if ka[i] != kb[i]]
-    if len(diff) == 1:
-        return ka[diff[0]] in _VOWELS and kb[diff[0]] in _VOWELS
-    if len(diff) == 2 and diff[1] == diff[0] + 1:
-        i, j = diff
-        return ka[i] == kb[j] and ka[j] == kb[i] and (ka[i] in _VOWELS) != (ka[j] in _VOWELS)
+@lru_cache(maxsize=500_000)
+def vowel_slip(a: str, b: str, a_kn: bool = False, b_kn: bool = False) -> bool:
+    """Two words with the same first letter and the same consonants in the same order, only the vowels
+    different or moved: a slip in English ('pravin' / 'parvin', 'sunil' / 'sunel'), or a name spelled
+    by sound across scripts (a Kannada word is tried in each of its readings). Different names fit too
+    (kamala / komal, ಕೃತಿಕಾ Kritika ~ Kartik), so this only ever sends a pair to an officer
+    (score.person_score caps it below 0.65). Never across genders."""
+    ra = _readings(a) if a_kn and not b_kn else [a]
+    rb = _readings(b) if b_kn and not a_kn else [b]
+    for x in ra:
+        for y in rb:
+            if gender_conflict(x, y) or (a_kn != b_kn and (cross_gender_conflict(x, y) if a_kn else cross_gender_conflict(y, x))):
+                continue
+            kx, ky = raw_key(x), raw_key(y)
+            if min(len(kx), len(ky)) >= 4 and kx[0] == ky[0] and kx != ky and skeleton(kx) == skeleton(ky) \
+                    and len(skeleton(kx)) >= 2:
+                return True
     return False
 
 
@@ -303,7 +294,7 @@ def cross_similarity(k: str, latin: str) -> float:
     """similarity() for a word written in Kannada (k) against one written in English (cross_script).
     Kannada's final short a may be the English name without it (ಪ್ರವೀಣ ~ Praveen), and _readings gives
     the other ways the Kannada spelling may stand for the English one; any of them counts as a spelling
-    variant (at most 0.95). Vowels-only differences are cross_vowels_only, which only sends a pair to an
+    variant (at most 0.95). Vowels-only differences are vowel_slip, which only sends a pair to an
     officer."""
     s = similarity(k, latin)
     gk, gl = gender_of(k), gender_of(latin)
@@ -325,18 +316,3 @@ def cross_similarity(k: str, latin: str) -> float:
             if counts(stripped):
                 s = max(s, min(stripped, 0.95))
     return s
-
-
-@lru_cache(maxsize=500_000)
-def cross_vowels_only(k: str, latin: str) -> bool:
-    """A Kannada-written word and an English one with the same consonants in the same order (at least
-    four sounds) and only the vowels different: English names spelled by sound in Kannada look like this
-    (ಎಡಿಸನ್ 'edisan' ~ Edison), but so do different names (ಕೃತಿಕಾ Kritika ~ Kartik, ಪರಿಮಳ Parimala ~
-    Pramila). So it only sends a pair to an officer (score.person_score caps it below 0.65), never
-    accepts it."""
-    for r in _readings(k):
-        if not cross_gender_conflict(r, latin):
-            rk, rl = raw_key(r), raw_key(latin)
-            if skeleton(rk) == skeleton(rl) and len(skeleton(rk)) >= 4:
-                return True
-    return False

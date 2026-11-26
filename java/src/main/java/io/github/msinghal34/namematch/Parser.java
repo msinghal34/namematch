@@ -245,7 +245,7 @@ final class Parser {
     private static final Pattern NUMBERS = Py.re("(?<![a-z0-9])\\d+(?![a-z0-9])");
     private static final Pattern DIGIT_WORDS = Py.re("[a-z]*\\d[a-z0-9]*");
     private static final Pattern A_TO_Z = Py.re("[a-z]");
-    private static final Pattern JOINED_CAPS = Py.re("(?<![A-Za-z.])(MS|MR|SH|AN|NA)(?=\\s+[A-Z]{2,})");
+    private static final Pattern INITIALS_CHUNK = Py.re("[\\s.]*(?:[a-z][\\s.]+){0,3}[a-z][\\s.]*");
     private static final Pattern SCRIPT_EDGE = Py.re("(?<=[A-Za-z])(?=[\\u0c80-\\u0cff])|(?<=[\\u0c80-\\u0cff])(?=[A-Za-z])");
     private static final Pattern PIECES = Py.re("\\x01\\w+(?::[\\w/]+)?|m/s|[a-z]+");
 
@@ -307,6 +307,22 @@ final class Parser {
         text = Py.sub(SEPARATORS, text, " " + SEP + " ");
         // "mattu" is Kannada for "and", left untranslated by the digitisers.
         text = Py.sub(AND_WORDS, text, " " + SEP + " ");
+        if (Switches.COMMA_INITIALS && text.indexOf(',') >= 0) {
+            // 'MEERA,K,BHAT', 'T,R,DINESH', 'V.K,DINESH': a comma beside a chunk of initials only
+            // separates the parts of one name, not two owners.
+            String[] chunks = text.split(",", -1);
+            boolean[] inits = new boolean[chunks.length];
+            for (int k = 0; k < chunks.length; k++) {
+                inits[k] = INITIALS_CHUNK.matcher(chunks[k]).matches();
+            }
+            StringBuilder joined = new StringBuilder(chunks[0]);
+            for (int k = 1; k < chunks.length; k++) {
+                // Never across a relation clause: in 'LAKSHMI W/O RAMESH,K,SURESH' K belongs to the next owner.
+                boolean join = (inits[k - 1] || inits[k]) && !chunks[k - 1].contains(REL) && !chunks[k].contains(REL);
+                joined.append(join ? " " : " " + SEP + " ").append(chunks[k]);
+            }
+            text = joined.toString();
+        }
         text = text.replace(",", " " + SEP + " ");
         // Numbering ("1.", "2)", "(3)") and stray digits separate owners; digits inside words are OCR slips.
         text = Py.sub(NUMBERS, text, " " + SEP + " ");
@@ -443,9 +459,6 @@ final class Parser {
             source = Py.sub(SCRIPT_EDGE, source, " ");
         }
         String latin = Translit.toLatin(source, Switches.CROSS_SCRIPT);
-        // In capitals, a two-letter word without a dot before a name is joined initials, not a
-        // title or "and": "MS RAMESH" = M S Ramesh, "AN RAMESH" = A N Ramesh.
-        latin = Py.sub(JOINED_CAPS, latin, m -> m.group(1).charAt(0) + " " + m.group(1).charAt(1));
         String text = mark(latin.toLowerCase(Locale.ROOT));
         // Tokenise into markers and words; any other punctuation is whitespace.
         text = text.replace("'", " ").replace("-", " ");

@@ -22,14 +22,14 @@ Maven:
 <dependency>
   <groupId>io.github.msinghal34</groupId>
   <artifactId>namematch</artifactId>
-  <version>0.5.0</version>
+  <version>0.6.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation 'io.github.msinghal34:namematch:0.5.0'
+implementation 'io.github.msinghal34:namematch:0.6.0'
 ```
 
 Use:
@@ -81,9 +81,10 @@ Reasons read like this:
 | `K.=krishnappa` | an initial standing for a word on the other side |
 | `extra: gowda` | a word only one side has (a surname or father's name), which costs a little |
 | `differs: ramesh / suresh` | words that disagree, which cost a lot |
-| `praveen?parvin one letter apart` | a one-letter slip in a short name; such a pair is capped at 0.64 and never accepted |
+| `praveen?parvin vowels differ` | the same consonants with different vowels, a slip or another name (Kamala / Komal); such a pair is capped at 0.64 and never accepted |
 | `relatives differ` | the same name with different fathers (or husbands) |
 | `gender conflict` | look-alike names of opposite genders (Mallappa / Mallamma) |
+| `rekha carries a man's name: a relative` | a woman's name in front of a man's name that matches the other side (Rekha Mahesh Kulkarni / Mahesh Kulkarni): his wife or daughter, capped at 0.60 |
 
 An owner as read is written like `savitha rao (rel anand rao) [f]`: titles removed, initials as capitals with a dot, the relation clause in brackets, and the gender when the record shows it.
 
@@ -109,7 +110,7 @@ r.ownersA().get(1).score();      // 0.244
 ## Command line
 
 ```sh
-java -jar namematch-0.5.0.jar "Ramesh S/o Krishna" "Ramesh S/o Gopal"
+java -jar namematch-0.6.0.jar "Ramesh S/o Krishna" "Ramesh S/o Gopal"
 python -m namematch "Ramesh S/o Krishna" "Ramesh S/o Gopal"
 ```
 
@@ -121,13 +122,13 @@ pair   ramesh (rel krishna) [m]  ~  ramesh (rel gopal) [m]
 
 ## How the two libraries stay identical
 
-The rules live once, in `python/src/namematch/rules.toml` and its three data tables (how common each name part is, in two versions, and which names are male or female), and the Java build packages those same files.
+The rules live once, in `python/src/namematch/rules.toml` and its two data tables (how common each name part is, and which names are male or female), and the Java build packages those same files.
 The scoring code exists in both languages, and the Python code is the reference.
 
-- `conformance/cases.jsonl` holds about 3,250 invented name pairs, each in all three owner modes (9,741 results), with every field of the Python result; about 650 of them mix Kannada and English.
+- `conformance/cases.jsonl` holds about 3,270 invented name pairs, each in all three owner modes (9,807 results), with every field of the Python result; about 650 of them mix Kannada and English.
   The Java tests must reproduce all of them exactly, and the Python tests fail if the file is out of date with the rules.
 - `tools/compare_private.py pairs.tsv` runs both libraries over your own name pairs, on your machine, and compares every field.
-  The two matched on all 448,797 results from about 150,000 real record pairs, a third of them Kannada property records.
+  The two matched on all 464,955 results from about 155,000 real record pairs, 60,000 of them from Kannada property records.
 
 To change a rule: change the Python code or `rules.toml`, bump the version, run `python conformance/make_cases.py`, make the same change in Java until `mvn verify` passes, and run `tools/compare_private.py` on real pairs.
 

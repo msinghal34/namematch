@@ -28,7 +28,7 @@ Releases there are permanent: a version can never be changed or deleted, only fo
 
 1. The version in `python/src/namematch/rules.toml`, `python/pyproject.toml` and `java/pom.xml` is the same, and `python conformance/make_cases.py` has been run.
 2. `cd python && python -m pytest`, `cd java && mvn verify`, and `python tools/compare_private.py <real pairs>` all pass.
-3. `cd java && JAVA_HOME=<a JDK 17 or newer> mvn -P release deploy` builds, signs and uploads the release; GPG asks for the key's passphrase.
+3. `cd java && JAVA_HOME=<a JDK 17 or newer> mvn -P release clean deploy` builds from scratch, signs and uploads the release; GPG asks for the key's passphrase. Always `clean`: files left in `target/` from an earlier build (such as a data table since removed) would otherwise go into the jar.
    The classes still target Java 11; the newer JDK is for the javadoc tool, which some Java 11 installs lack.
 4. At https://central.sonatype.com under Deployments, check the upload and press Publish.
    It appears on Maven Central within about half an hour.

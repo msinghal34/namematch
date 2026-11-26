@@ -26,8 +26,10 @@ final class Scorer {
     }
 
     static final double MATCH_FLOOR = 0.70;   // token similarity below this is "not the same word"
-    static final double NEAR_SIM = 0.75;      // a near-miss word (one letter slip in a short name) when it is allowed
+    static final double NEAR_SIM = 0.75;      // a vowel-slip word (same consonants, vowels differ) when it is allowed
     static final double NEAR_CAP = 0.64;      // ... and the most such a pair can score: "needs a check", never accepted
+    static final double INITIAL_CONFLICT = 0.6;   // per pair of initials that disagree: the same given name with another father
+    static final double CARRIED_CAP = 0.6;        // her name in front of his (Rekha Mahesh Kulkarni / Mahesh Kulkarni): a relative
     /** A part counts as common from 25 sightings per 153,218 persons: the sample the weights were tuned on. */
     private static final double COMMON_RATE = 25.0 / 153_218;
 
@@ -49,9 +51,8 @@ final class Scorer {
         }
     }
 
-    /** The table the eaasthi_weights switch picks, worked out once. */
-    private static final Table TABLE =
-        new Table(Switches.EAASTHI_WEIGHTS && !Rules.TOKEN_FREQ_EAASTHI.counts.isEmpty() ? Rules.TOKEN_FREQ_EAASTHI : Rules.TOKEN_FREQ);
+    /** The frequency table, worked out once. */
+    private static final Table TABLE = new Table(Rules.TOKEN_FREQ);
 
     /** 1.0 for a distinctive word, down to 0.35 for the commonest (kumar). */
     static double weight(String token) {
@@ -201,7 +202,6 @@ final class Scorer {
         List<Unit> ub = units(b);
         List<Candidate> candidates = new ArrayList<>();
         Set<List<String>> nearPairs = new HashSet<>();
-        Set<List<String>> vowelPairs = new HashSet<>();   // Kannada vs English words with only the vowels different
         for (Unit x : ua) {
             for (Unit y : ub) {
                 if (x.size() > 1 && y.size() > 1) {
@@ -212,13 +212,12 @@ final class Scorer {
                 if (s < MATCH_FLOOR && near && x.size() == 1 && y.size() == 1) {
                     String latinGender = Phonetic.genderOf(x.kn ? y.text : x.text);
                     boolean contradicts = !recorded.isEmpty() && !latinGender.isEmpty() && !latinGender.equals(recorded);
-                    if (Phonetic.nearMiss(x.text, y.text)) {
+                    // Across scripts only with cross_script, and never against the gender the Kannada record states.
+                    boolean cross = x.kn != y.kn;
+                    if ((!cross || (Switches.CROSS_SCRIPT && !contradicts))
+                            && Phonetic.vowelSlip(x.text, y.text, x.kn && cross, y.kn && cross)) {
                         s = NEAR_SIM;
                         nearPairs.add(List.of(x.text, y.text));
-                    } else if (Switches.CROSS_SCRIPT && x.kn != y.kn && !contradicts
-                            && (x.kn ? Phonetic.crossVowelsOnly(x.text, y.text) : Phonetic.crossVowelsOnly(y.text, x.text))) {
-                        s = NEAR_SIM;
-                        vowelPairs.add(List.of(x.text, y.text));
                     }
                 }
                 if (s >= MATCH_FLOOR) {
@@ -243,9 +242,7 @@ final class Scorer {
             matchedMass += c.s * w;
             matchedW += w;
             if (nearPairs.contains(List.of(c.x.text, c.y.text))) {
-                reasons.add(c.x.text + "?" + c.y.text + " one letter apart");
-            } else if (vowelPairs.contains(List.of(c.x.text, c.y.text))) {
-                reasons.add(c.x.text + "?" + c.y.text + " vowels differ across scripts");
+                reasons.add(c.x.text + "?" + c.y.text + " vowels differ");
             } else if (!c.x.text.equals(c.y.text)) {
                 reasons.add(c.x.text + "~" + c.y.text + " " + Py.fixed(c.s, 2));
             }
@@ -394,7 +391,7 @@ final class Scorer {
             reasons.add("extra: " + String.join(" ", names));
         }
         if (initConflicts != 0) {
-            score *= Math.pow(0.75, initConflicts);
+            score *= Math.pow(INITIAL_CONFLICT, initConflicts);
             reasons.add("initials differ (" + initConflicts + ")");
         }
         if (wordConflicts != 0) {
@@ -406,6 +403,45 @@ final class Scorer {
         if (genderClash) {
             score = Math.min(score, 0.2);
             reasons.add("gender conflict");
+        }
+        if (Switches.CARRIED_NAME && score > CARRIED_CAP) {
+            // 'REKHA MAHESH KULKARNI' vs 'Mahesh Kulkarni', 'PRIYA ARVIND' vs 'ARVIND P': a woman's own name,
+            // unmatched or only an initial's, in front of a man's name that matches the other side's given
+            // name. She carries her husband's or father's name; she is not him. Not when her name and the next
+            // word are together a man's name the records list: 'LAKSHMI NARAYANA' vs 'L NARAYANA' is one man
+            // (the records only, not an ending: Vandana + Nandkumar ends in -kumar but is no name).
+            Object[][] sides = {{a, usedA, firstA, usedB, firstB, b}, {b, usedB, firstB, usedA, firstA, a}};
+            for (Object[] row : sides) {
+                @SuppressWarnings("unchecked") List<Token> side = (List<Token>) row[0];
+                BitSet used = (BitSet) row[1];
+                Integer first = (Integer) row[2];
+                BitSet oUsed = (BitSet) row[3];
+                Integer oFirst = (Integer) row[4];
+                @SuppressWarnings("unchecked") List<Token> other = (List<Token>) row[5];
+                if (first == null || used.get(first) || oFirst == null || !oUsed.get(oFirst)) {
+                    continue;
+                }
+                Integer nxt = null;
+                for (int i = first + 1; i < side.size(); i++) {
+                    if (!side.get(i).initial) {
+                        nxt = i;
+                        break;
+                    }
+                }
+                if (nxt != null && "m".equals(Rules.NAME_GENDER.get(Phonetic.genderKey(side.get(first).text + side.get(nxt).text)))) {
+                    continue;
+                }
+                boolean hisNameMatched = false;
+                for (int i = used.nextSetBit(0); i >= 0; i = used.nextSetBit(i + 1)) {
+                    hisNameMatched |= !side.get(i).initial && Phonetic.genderOf(side.get(i).text).equals("m");
+                }
+                if (Phonetic.genderOf(side.get(first).text).equals("f") && !Phonetic.genderOf(other.get(oFirst).text).equals("f")
+                        && hisNameMatched) {
+                    score = CARRIED_CAP;
+                    reasons.add(side.get(first).text + " carries a man's name: a relative");
+                    break;
+                }
+            }
         }
         return new Scored(score, reasons);
     }
@@ -457,6 +493,25 @@ final class Scorer {
             }
             Set<String> own = new TreeSet<>(x.initials());
             own.removeAll(y.initials());
+            if (Switches.FATHER_INITIAL_FIT && !father.isEmpty() && !own.isEmpty() && !anyFits(own, father.get(0))) {
+                // 'S Ganapati' vs 'GANAPATI SHENOY S/O RAMAPPA SHENOY': S. is Shenoy, a word y has, not the father.
+                // Not by the given name itself: in 'R RAMESH' vs 'RAMESH S/O GOPAL' the R is not Ramesh.
+                List<String> words = new ArrayList<>();
+                for (Token t : y.tokens) {
+                    if (!t.initial) {
+                        words.add(t.text);
+                    }
+                }
+                List<String> later = words.isEmpty() ? words : words.subList(1, words.size());
+                own.removeIf(i -> {
+                    for (String w : later) {
+                        if (Phonetic.initialOf(w).contains(i)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+            }
             if (!father.isEmpty() && !own.isEmpty()) {
                 Set<String> fits = Phonetic.initialOf(father.get(0));
                 boolean any = false;
@@ -472,6 +527,16 @@ final class Scorer {
         return new Scored(score, reasons);
     }
 
+    private static boolean anyFits(Set<String> initials, String word) {
+        Set<String> fits = Phonetic.initialOf(word);
+        for (String i : initials) {
+            if (fits.contains(i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static List<List<Token>> variants(Person p) {
         List<List<Token>> out = new ArrayList<>();
         out.add(p.tokens);
@@ -481,25 +546,18 @@ final class Scorer {
 
     static Scored personScore(Person p, Person q) {
         Scored first = personScore(p, q, false);
-        // A pair the rules call different gets a second look allowing one-letter slips in short names
-        // (Praveen / Parvin, Manish / Munish). Such a pair goes to an officer, never to acceptance, and
-        // a pair the rules already score 0.35 or more is left exactly as it was.
-        if (Switches.NEAR_MISS && first.score < 0.35) {
+        // A pair the rules call different gets a second look allowing words whose vowels differ
+        // (Praveen / Parvin, Sunil / Sunel, a Kannada spelling of an English name). Such a pair goes to an
+        // officer, never to acceptance, and a pair the rules already score 0.35 or more is left exactly as it was.
+        if (Switches.VOWEL_SLIP && first.score < 0.35) {
             Scored second = personScore(p, q, true);
             double s2 = Math.min(second.score, NEAR_CAP);
             boolean slipped = false;
             for (String r : second.reasons) {
-                slipped |= r.contains("one letter apart");
+                slipped |= r.endsWith("vowels differ");
             }
             if (s2 > first.score && slipped) {
-                return new Scored(s2, plus(second.reasons, "one-letter slip: needs a check"));
-            }
-            boolean vowels = false;
-            for (String r : second.reasons) {
-                vowels |= r.contains("vowels differ across scripts");
-            }
-            if (s2 > first.score && vowels) {
-                return new Scored(s2, plus(second.reasons, "spelling across scripts: needs a check"));
+                return new Scored(s2, plus(second.reasons, "vowels differ: needs a check"));
             }
         }
         return first;

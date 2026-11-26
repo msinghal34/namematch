@@ -12,8 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The rule data shared with the Python library: rules.toml, token_freq.tsv, token_freq_eaasthi.tsv and
- * name_gender.tsv,
+ * The rule data shared with the Python library: rules.toml, token_freq.tsv and name_gender.tsv,
  * packaged next to this class. Read once.
  */
 final class Rules {
@@ -22,10 +21,8 @@ final class Rules {
 
     static final Map<String, Object> RULES = Collections.unmodifiableMap(Toml.parse(read("rules.toml")));
     static final String VERSION = (String) RULES.get("version");
-    /** How common each name part is, and how many persons were counted: the original sample ... */
+    /** How common each name part is, counted over the eAasthi export (1.2 million properties), and how many persons were counted. */
     static final Freq TOKEN_FREQ = loadFreq("token_freq.tsv");
-    /** ... and the eAasthi export (1.2 million properties); the eaasthi_weights switch picks this one. */
-    static final Freq TOKEN_FREQ_EAASTHI = loadFreq("token_freq_eaasthi.tsv");
     static final Map<String, String> NAME_GENDER = loadGender();
 
     @SuppressWarnings("unchecked")

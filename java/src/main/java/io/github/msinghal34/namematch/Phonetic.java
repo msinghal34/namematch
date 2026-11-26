@@ -52,7 +52,6 @@ final class Phonetic {
 
     /** Ordered rewrites. */
     private static final List<Rewrite> REWRITES = Arrays.asList(
-        new Rewrite("^(shri|shree|sree|sri|shri)", "sri"),
         new Rewrite("ksh", "ks"),
         new Rewrite("x", "ks"),
         new Rewrite("q", "k"),
@@ -280,20 +279,7 @@ final class Phonetic {
                 && Py.head(genderKey(a), 3).equals(Py.head(genderKey(b), 3))) {
             return true;
         }
-        // A name plus a final i / ee is the feminine form when the records do not say otherwise
-        // (jayanth / jayanthi, shankar / shankari).
         String[][] orders = {{a, b}, {b, a}};
-        for (String[] xy : orders) {
-            String x = xy[0];
-            String y = xy[1];
-            String gx = genderKey(x);
-            String gy = genderKey(y);
-            if (gy.equals(gx + "i") && !Py.inChars(Py.last(gx), "aeiou")
-                    && !(genderOf(x).isEmpty() && genderOf(y).isEmpty())
-                    && !genderOf(x).equals(genderOf(y))) {
-                return true;
-            }
-        }
         for (List<String> pair : PAIRS) {
             String male = pair.get(0);
             String female = pair.get(1);
@@ -364,40 +350,31 @@ final class Phonetic {
         return Py.round(best, 3);
     }
 
-    private static boolean isVowel(char c) {
-        return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u';
+    /**
+     * Two words with the same first letter and the same consonants in the same order, only the vowels
+     * different or moved: a slip in English ('pravin' / 'parvin'), or an English name spelled by sound in
+     * Kannada (a Kannada word is tried in each of its readings). Different names fit too (kamala / komal),
+     * so this only ever sends a pair to an officer (capped below 0.65). Never across genders.
+     */
+    static boolean vowelSlip(String a, String b, boolean aKn, boolean bKn) {
+        return VOWEL_SLIP.get(Arrays.asList(a, b, String.valueOf(aKn), String.valueOf(bKn)));
     }
 
-    /**
-     * Short names one letter-slip apart that the main test calls different: the same consonants in
-     * the same order, and either one vowel swapped with the consonant beside it ('pravin' / 'parvin')
-     * or one vowel changed ('manish' / 'munish'). Never across genders. Used only to send a pair to
-     * an officer (score capped below 0.65), never to accept it.
-     */
-    static boolean nearMiss(String a, String b) {
-        if (genderConflict(a, b)) {
-            return false;
-        }
-        String ka = rawKey(a);
-        String kb = rawKey(b);
-        if (ka.length() != kb.length() || ka.length() < 4 || ka.equals(kb) || ka.charAt(0) != kb.charAt(0)
-                || !skeleton(ka).equals(skeleton(kb))) {
-            return false;
-        }
-        List<Integer> diff = new ArrayList<>();
-        for (int i = 0; i < ka.length(); i++) {
-            if (ka.charAt(i) != kb.charAt(i)) {
-                diff.add(i);
+    private static boolean computeVowelSlip(String a, String b, boolean aKn, boolean bKn) {
+        List<String> ra = aKn && !bKn ? readings(a) : Collections.singletonList(a);
+        List<String> rb = bKn && !aKn ? readings(b) : Collections.singletonList(b);
+        for (String x : ra) {
+            for (String y : rb) {
+                if (genderConflict(x, y) || (aKn != bKn && (aKn ? crossGenderConflict(x, y) : crossGenderConflict(y, x)))) {
+                    continue;
+                }
+                String kx = rawKey(x);
+                String ky = rawKey(y);
+                if (Math.min(kx.length(), ky.length()) >= 4 && kx.charAt(0) == ky.charAt(0) && !kx.equals(ky)
+                        && skeleton(kx).equals(skeleton(ky)) && skeleton(kx).length() >= 2) {
+                    return true;
+                }
             }
-        }
-        if (diff.size() == 1) {
-            int i = diff.get(0);
-            return isVowel(ka.charAt(i)) && isVowel(kb.charAt(i));
-        }
-        if (diff.size() == 2 && diff.get(1) == diff.get(0) + 1) {
-            int i = diff.get(0);
-            int j = diff.get(1);
-            return ka.charAt(i) == kb.charAt(j) && ka.charAt(j) == kb.charAt(i) && isVowel(ka.charAt(i)) != isVowel(ka.charAt(j));
         }
         return false;
     }
@@ -434,8 +411,8 @@ final class Phonetic {
     private static final Pattern NASAL_N = Py.re("n(?=[^aeiouyn])");
     private static final Memo<List<String>, Double> CROSS_SIMILARITY =
         new Memo<>(500_000, kl -> computeCrossSimilarity(kl.get(0), kl.get(1)));
-    private static final Memo<List<String>, Boolean> CROSS_VOWELS_ONLY =
-        new Memo<>(500_000, kl -> computeCrossVowelsOnly(kl.get(0), kl.get(1)));
+    private static final Memo<List<String>, Boolean> VOWEL_SLIP = new Memo<>(500_000,
+        k -> computeVowelSlip(k.get(0), k.get(1), Boolean.parseBoolean(k.get(2)), Boolean.parseBoolean(k.get(3))));
 
     private static List<String> genderSuffixes() {
         List<String> out = new ArrayList<>();
@@ -521,23 +498,5 @@ final class Phonetic {
             }
         }
         return s;
-    }
-
-    /** The same consonants in the same order (at least four sounds), only the vowels different: review, never accept. */
-    static boolean crossVowelsOnly(String k, String latin) {
-        return CROSS_VOWELS_ONLY.get(Arrays.asList(k, latin));
-    }
-
-    private static boolean computeCrossVowelsOnly(String k, String latin) {
-        for (String r : readings(k)) {
-            if (!crossGenderConflict(r, latin)) {
-                String rk = rawKey(r);
-                String rl = rawKey(latin);
-                if (skeleton(rk).equals(skeleton(rl)) && skeleton(rk).length() >= 4) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 }

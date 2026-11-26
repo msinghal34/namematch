@@ -140,6 +140,16 @@ def _mark(text: str) -> str:
     text = re.sub(r"[|;&+()\[\]{}\n\t]", f" {SEP} ", text)
     # "mattu" is Kannada for "and", left untranslated by the digitisers.
     text = re.sub(r"(?<![a-z\x01:])(and|an|with|mattu|maththu|haagu)(?![a-z])", f" {SEP} ", text)
+    if ON["comma_initials"] and "," in text:
+        # 'MEERA,K,BHAT', 'T,R,DINESH', 'V.K,DINESH': a comma beside a chunk of initials only
+        # separates the parts of one name, not two owners.
+        chunks = text.split(",")
+        inits = [bool(re.fullmatch(r"[\s.]*(?:[a-z][\s.]+){0,3}[a-z][\s.]*", c)) for c in chunks]
+        text = chunks[0]
+        for k in range(1, len(chunks)):
+            # Never across a relation clause: in 'LAKSHMI W/O RAMESH,K,SURESH' K belongs to the next owner.
+            join = (inits[k - 1] or inits[k]) and REL not in chunks[k - 1] and REL not in chunks[k]
+            text += (" " if join else f" {SEP} ") + chunks[k]
     text = re.sub(r",", f" {SEP} ", text)
     # Numbering ("1.", "2)", "(3)") and stray digits separate owners; digits inside words are OCR slips.
     text = re.sub(r"(?<![a-z0-9])\d+(?![a-z0-9])", f" {SEP} ", text)
@@ -210,9 +220,6 @@ def parse(raw: str) -> ParsedName:
         # 'Kಲಕ್ಷ್ಮಿ', 'ಗೀತಾM.S': a word that changes script is two words.
         source = _SCRIPT_EDGE.sub(" ", source)
     latin = to_latin(source, mark=ON["cross_script"])
-    # In capitals, a two-letter word without a dot before a name is joined initials, not a
-    # title or "and": "MS RAMESH" = M S Ramesh, "AN RAMESH" = A N Ramesh.
-    latin = re.sub(r"(?<![A-Za-z.])(MS|MR|SH|AN|NA)(?=\s+[A-Z]{2,})", lambda m: " ".join(m.group(1)), latin)
     text = _mark(latin.lower())
     # Tokenise into markers and words; any other punctuation is whitespace.
     text = text.replace("'", " ").replace("-", " ")
