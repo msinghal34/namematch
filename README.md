@@ -8,7 +8,9 @@ Titles (Sri, Smt) and relation clauses (S/o, W/o, bin) are set aside, an initial
 Every result comes with a score, a band and the reasons behind it.
 
 Kannada and English spellings of the same name are matched the way they are written in Karnataka's records: ಪ್ರವೀಣ ಕುಮಾರ್ against PRAVEEN KUMAR, ವೈ ಕೆ ಹರಿಹರ ರಾವ್ against Y K HARIHARA RAO, a word that switches script midway, and the usual Kannada renderings of English, Muslim and South Indian names.
-Where the two scripts cannot tell names apart (the same consonants with different vowels, as in Kritika and Kartik), the pair is sent for a check instead of being accepted, and Kannada's silent final vowel never joins names of opposite genders (Muniyamma and Muniyappa stay apart).
+Where the two scripts cannot tell names apart (the same consonants with different vowels, as in Kritika and Kartik), the pair is sent for a check instead of being accepted.
+Gender endings keep two names apart across scripts (Muniyamma and Muniyappa, Muniyakka and Muniyappa), and so does a gender the Kannada record states (ಶ್ರೀಮತಿ ಪ್ರವೀಣ is not Praveen).
+Kannada's silent final vowel cannot show gender, though: a name and its form with a final a may still meet (Ankita and Ankit), as may a name whose gender is not known (Basava and Basavva), and a gender stated only on the English side does not stop it.
 
 The same rules ship as a **Java library** (Java 11 or newer, no dependencies) and a **Python library** (Python 3.11 or newer, no dependencies), and the two give identical results.
 
