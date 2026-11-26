@@ -5,7 +5,7 @@ package io.github.msinghal34.namematch;
  *
  * <pre>{@code
  * MatchResult r = NameMatch.match("Sri. K. Ramesh Kumar S/o Krishnappa", "RAMESH KUMAR K");
- * r.score();      // 0.95
+ * r.score();      // 1.0
  * r.band();       // Band.SAME
  * r.reasons();    // [...]
  * }</pre>

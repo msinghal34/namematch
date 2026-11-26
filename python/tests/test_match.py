@@ -185,7 +185,7 @@ def test_one_letter_slip_goes_to_review_never_accepted():
     ("SOWMYA R", "ಸೌಮ್ಯ ಆರ್"),                      # ow ~ au
     ("SHYLAJA M", "ಶೈಲಜಾ ಎಂ"),                      # y between consonants ~ ai
     ("GNANA PRAKASH", "ಜ್ಞಾನ ಪ್ರಕಾಶ್"),             # ಜ್ಞ ~ gn
-    ("T N GIRIDHAR RAO", "ಟಿ ಎನ್ ಗಿರಿಧರ ರಾವ್"),      # rao ~ raav
+    ("Y K HARIHARA RAO", "ವೈ ಕೆ ಹರಿಹರ ರಾವ್"),      # rao ~ raav
     ("NIRMAL DAS", "ನಿರ್ಮಲ್ ದ್ಯಾಸ್"),               # v0.5.0 (second decision): the English a written as ಯಾ
     ("HAMSA VENI", "ಹಂಸ ವೇಣಿ"),                     # v0.5.0 (second decision): the nasal sign written m in English
 ])
@@ -254,4 +254,20 @@ def test_kannada_gender_endings_keep_their_gender(a, b):
     ("ADITYA", "ಆದಿತ್ಯ"), ("SOWMYA", "ಸೌಮ್ಯ"), ("KAVYA", "ಕಾವ್ಯ"), ("CHAITANYA", "ಚೈತನ್ಯ"),
 ])
 def test_names_ending_in_ya_still_match_across_scripts(a, b):
+    assert match(a, b).score >= SAME, match(a, b)
+
+
+@pytest.mark.parametrize("a, b", [
+    ("ಶ್ರೀಮತಿ ಪ್ರವೀಣ", "PRAVEEN"),                     # the record says she is a woman: not Praveen
+    ("ಪ್ರವೀಣ W/o ರಮೇಶ್", "PRAVEEN"),
+    ("MUNIYAKKA", "MUNIYAPPA"), ("HANUMAVVA", "HANUMAPPA"), ("ಮುನಿಯಕ್ಕ", "MUNIYAPPA"),   # -akka / -avva are female
+])
+def test_recorded_and_ending_genders_keep_names_apart(a, b):
+    assert match(a, b).score < SAME, match(a, b)
+
+
+@pytest.mark.parametrize("a, b", [
+    ("ಶ್ರೀಮತಿ ಪ್ರವೀಣ", "PRAVEENA"), ("ಪ್ರವೀಣ S/o ರಮೇಶ್", "PRAVEEN"), ("BASAVVA", "ಬಸವ್ವ"), ("HANUMAKKA", "ಹನುಮಕ್ಕ"),
+])
+def test_matching_genders_still_match(a, b):
     assert match(a, b).score >= SAME, match(a, b)

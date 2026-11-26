@@ -7,7 +7,7 @@ See the repository's README for the full description; the Java library in the sa
 from namematch import match
 
 r = match("Suresh Kumr Gowda", "SURESH KUMAR")
-r.score    # 0.762
+r.score    # 0.764
 r.band     # "likely_same"
 r.reasons  # ["kumr~kumar 0.86", "extra: gowda"]
 ```

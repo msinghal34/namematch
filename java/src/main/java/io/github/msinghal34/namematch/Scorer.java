@@ -142,9 +142,16 @@ final class Scorer {
     }
 
     /** Word similarity; a Kannada-written word against an English-written one uses Phonetic.crossSimilarity. */
-    private static double similar(String x, boolean xKn, String y, boolean yKn) {
+    private static double similar(String x, boolean xKn, String y, boolean yKn, String recorded) {
         if (Switches.CROSS_SCRIPT && xKn != yKn) {
-            return xKn ? Phonetic.crossSimilarity(x, y) : Phonetic.crossSimilarity(y, x);
+            String k = xKn ? x : y;
+            String latin = xKn ? y : x;
+            String g = Phonetic.genderOf(latin);
+            // The gender the Kannada side's record states (Smt, W/o, D/o, kom) is not overridden by its readings.
+            if (!recorded.isEmpty() && !g.isEmpty() && !g.equals(recorded)) {
+                return Phonetic.similarity(k, latin);
+            }
+            return Phonetic.crossSimilarity(k, latin);
         }
         return Phonetic.similarity(x, y);
     }
@@ -184,6 +191,11 @@ final class Scorer {
     }
 
     static Scored scoreTokens(List<Token> a, List<Token> b, List<Token> relA, List<Token> relB, boolean near) {
+        return scoreTokens(a, b, relA, relB, near, "", "");
+    }
+
+    static Scored scoreTokens(List<Token> a, List<Token> b, List<Token> relA, List<Token> relB, boolean near,
+                              String genderA, String genderB) {
         List<String> reasons = new ArrayList<>();
         List<Unit> ua = units(a);
         List<Unit> ub = units(b);
@@ -195,12 +207,15 @@ final class Scorer {
                 if (x.size() > 1 && y.size() > 1) {
                     continue;
                 }
-                double s = similar(x.text, x.kn, y.text, y.kn);
+                String recorded = x.kn ? genderA : genderB;     // the gender the Kannada side's record states
+                double s = similar(x.text, x.kn, y.text, y.kn, recorded);
                 if (s < MATCH_FLOOR && near && x.size() == 1 && y.size() == 1) {
+                    String latinGender = Phonetic.genderOf(x.kn ? y.text : x.text);
+                    boolean contradicts = !recorded.isEmpty() && !latinGender.isEmpty() && !latinGender.equals(recorded);
                     if (Phonetic.nearMiss(x.text, y.text)) {
                         s = NEAR_SIM;
                         nearPairs.add(List.of(x.text, y.text));
-                    } else if (Switches.CROSS_SCRIPT && x.kn != y.kn
+                    } else if (Switches.CROSS_SCRIPT && x.kn != y.kn && !contradicts
                             && (x.kn ? Phonetic.crossVowelsOnly(x.text, y.text) : Phonetic.crossVowelsOnly(y.text, x.text))) {
                         s = NEAR_SIM;
                         vowelPairs.add(List.of(x.text, y.text));
@@ -494,7 +509,7 @@ final class Scorer {
         Scored best = null;
         for (List<Token> ta : variants(p)) {
             for (List<Token> tb : variants(q)) {
-                Scored s = scoreTokens(ta, tb, p.relative, q.relative, near);
+                Scored s = scoreTokens(ta, tb, p.relative, q.relative, near, p.gender, q.gender);
                 if (best == null || s.score > best.score) {
                     best = s;
                 }

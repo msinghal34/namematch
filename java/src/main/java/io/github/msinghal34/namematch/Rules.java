@@ -12,7 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The rule data shared with the Python library: rules.toml, token_freq.tsv and name_gender.tsv,
+ * The rule data shared with the Python library: rules.toml, token_freq.tsv, token_freq_eaasthi.tsv and
+ * name_gender.tsv,
  * packaged next to this class. Read once.
  */
 final class Rules {
@@ -79,9 +80,13 @@ final class Rules {
 
     private static Freq loadFreq(String name) {
         String text = read(name);
+        if (text == null) {
+            // Every table ships in the jar; a missing one would silently change scores.
+            throw new IllegalStateException(name + " is missing from the namematch jar");
+        }
         Map<String, Integer> out = new HashMap<>();
         int persons = 0;
-        if (text != null) {
+        {
             for (String line : text.split("\r\n|\n|\r", -1)) {
                 if (line.startsWith("# persons")) {
                     persons = Integer.parseInt(line.split("\t", -1)[1]);
@@ -95,6 +100,9 @@ final class Rules {
     }
 
     private static Map<String, String> loadGender() {
+        if (read("name_gender.tsv") == null) {
+            throw new IllegalStateException("name_gender.tsv is missing from the namematch jar");
+        }
         Map<String, String> out = new HashMap<>();
         for (String line : dataLines("name_gender.tsv")) {
             String[] f = line.split("\t", -1);

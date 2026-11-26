@@ -22,7 +22,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-namematch = ["rules.toml", "token_freq.tsv", "name_gender.tsv"]
+namematch = ["rules.toml", "token_freq.tsv", "token_freq_eaasthi.tsv", "name_gender.tsv"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

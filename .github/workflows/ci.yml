@@ -18,6 +18,8 @@ jobs:
       - run: pip install pytest
       - run: python -m pytest -q
         working-directory: python
+      # The installed package, not the source tree: every data table must ship in it.
+      - run: pip install ./python && cd python && python -m pytest -q -o pythonpath= -p no:cacheprovider
 
   java:
     runs-on: ubuntu-latest

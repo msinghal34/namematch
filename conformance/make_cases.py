@@ -124,7 +124,7 @@ HAND = [
     ("SOWMYA R", "ಸೌಮ್ಯ ಆರ್"), ("SHYLAJA M", "ಶೈಲಜಾ ಎಂ"), ("GNANA PRAKASH", "ಜ್ಞಾನ ಪ್ರಕಾಶ್"), ("JNANESH", "ಜ್ಞಾನೇಶ್"),
     ("GNANESH", "ಜ್ಞಾನೇಶ್"), ("ಜ್ಙಾನೇಶ್", "ಜ್ಞಾನೇಶ್"), ("PRAJNA", "ಪ್ರಜ್ಞಾ"), ("PRAGNA", "ಪ್ರಜ್ಞಾ"), ("JNANA MURTHY", "GNANA MURTHY"),
     ("RAJNI", "RAJINI"), ("RAJNI", "ರಜನಿ"), ("RAJNI", "RAGINI"), ("SAJNI", "SAJANI"), ("PRAJNA", "PRAGNA"),
-    ("T N GIRIDHAR RAO", "ಟಿ ಎನ್ ಗಿರಿಧರ ರಾವ್"), ("ROBERT D LOBO", "ರಾಬರ್ಟ್ ಡಿ ಲೋಬೊ"), ("NIRMAL DAS", "ನಿರ್ಮಲ್ ದ್ಯಾಸ್"),
+    ("Y K HARIHARA RAO", "ವೈ ಕೆ ಹರಿಹರ ರಾವ್"), ("ROBERT D LOBO", "ರಾಬರ್ಟ್ ಡಿ ಲೋಬೊ"), ("NIRMAL DAS", "ನಿರ್ಮಲ್ ದ್ಯಾಸ್"),
     ("HAMSA VENI", "ಹಂಸ ವೇಣಿ"), ("IMTIAZ AHMED", "ಇಂತಿಯಾಜ್ ಅಹ್ಮದ್"), ("SHYAM SUNDAR", "ಶ್ಯಾಮ್ ಸುಂದರ್"),
     ("KARTIK", "ಕೃತಿಕಾ"), ("PRITAM", "ಪ್ರತಿಮಾ"), ("PRAMILA", "ಪರಿಮಳ"), ("KAMAL", "ಕೋಮಲ್"), ("MALLAPPA", "ಮಲ್ಲಮ್ಮ"),
     ("LAKSHMI", "ಲಕ್ಷ್ಮಯ್ಯ"), ("NARASIMHA", "ನರಸಮ್ಮ"), ("MUNIYAPPA", "ಮುನಿಯಮ್ಮ"), ("ADITI", "ಆದಿತ್ಯ"), ("SALIM", "ಸಲ್ಮ"),

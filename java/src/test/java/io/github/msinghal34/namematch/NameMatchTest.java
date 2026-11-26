@@ -110,7 +110,7 @@ class NameMatchTest {
     @Test
     void kannadaAndEnglishSpellingsOfOneNameMatch() {
         assertTrue(NameMatch.match("PRAVEEN KUMAR", "ಪ್ರವೀಣ ಕುಮಾರ್").isAccepted());
-        assertTrue(NameMatch.match("T N GIRIDHAR RAO", "ಟಿ ಎನ್ ಗಿರಿಧರ ರಾವ್").isAccepted());
+        assertTrue(NameMatch.match("Y K HARIHARA RAO", "ವೈ ಕೆ ಹರಿಹರ ರಾವ್").isAccepted());
         assertTrue(NameMatch.match("Kಲಕ್ಷ್ಮಿ", "Smt K.Lakshmi").isAccepted());
     }
 

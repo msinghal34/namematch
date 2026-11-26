@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass, field
 
 from .parse import Organisation, ParsedName, Person, Token, parse
-from .phonetic import cross_gender_conflict, cross_similarity, cross_vowels_only, gender_conflict, initial_of, key, near_miss, similarity
+from .phonetic import cross_gender_conflict, cross_similarity, cross_vowels_only, gender_conflict, gender_of, initial_of, key, near_miss, similarity
 from .rules import TOKEN_FREQ, TOKEN_FREQ_EAASTHI, TOKEN_PERSONS, TOKEN_PERSONS_EAASTHI
 from .switches import ON
 
@@ -85,10 +85,16 @@ class _Unit:
     kn: bool = False        # some word of it came from Kannada script
 
 
-def _similar(x: str, x_kn: bool, y: str, y_kn: bool) -> float:
-    """Word similarity; a Kannada-written word against an English-written one uses cross_similarity."""
+def _similar(x: str, x_kn: bool, y: str, y_kn: bool, recorded: str = "") -> float:
+    """Word similarity; a Kannada-written word against an English-written one uses cross_similarity,
+    unless `recorded`, the gender the Kannada side's record states (Smt, W/o, D/o, kom), contradicts
+    the English name: then Kannada's readings may not override that evidence (ಶ್ರೀಮತಿ ಪ್ರವೀಣ is not Praveen)."""
     if ON["cross_script"] and x_kn != y_kn:
-        return cross_similarity(x, y) if x_kn else cross_similarity(y, x)
+        k, latin = (x, y) if x_kn else (y, x)
+        g = gender_of(latin)
+        if recorded and g and g != recorded:
+            return similarity(k, latin)
+        return cross_similarity(k, latin)
     return similarity(x, y)
 
 
@@ -115,7 +121,7 @@ def _units(tokens: list[Token]) -> list[_Unit]:
 
 
 def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b: list[Token] = (),
-                  near: bool = False) -> tuple[float, list[str], dict]:
+                  near: bool = False, gender_a: str = "", gender_b: str = "") -> tuple[float, list[str], dict]:
     reasons: list[str] = []
     ua, ub = _units(a), _units(b)
     candidates = []
@@ -125,12 +131,14 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
         for y in ub:
             if len(x.idx) > 1 and len(y.idx) > 1:
                 continue
-            s = _similar(x.text, x.kn, y.text, y.kn)
+            recorded = gender_a if x.kn else gender_b       # the gender the Kannada side's record states
+            s = _similar(x.text, x.kn, y.text, y.kn, recorded)
             if s < MATCH_FLOOR and near and len(x.idx) == 1 and len(y.idx) == 1:
+                latin_gender = gender_of(y.text if x.kn else x.text)
                 if near_miss(x.text, y.text):
                     s = NEAR_SIM
                     near_pairs.add((x.text, y.text))
-                elif ON["cross_script"] and x.kn != y.kn and (
+                elif ON["cross_script"] and x.kn != y.kn and not (recorded and latin_gender and latin_gender != recorded) and (
                         cross_vowels_only(x.text, y.text) if x.kn else cross_vowels_only(y.text, x.text)):
                     s = NEAR_SIM
                     vowel_pairs.add((x.text, y.text))
@@ -305,7 +313,7 @@ def _person_score(p: Person, q: Person, near: bool) -> tuple[float, list[str]]:
     best = None
     for ta in _variants(p):
         for tb in _variants(q):
-            s, reasons, _ = _score_tokens(ta, tb, p.relative, q.relative, near)
+            s, reasons, _ = _score_tokens(ta, tb, p.relative, q.relative, near, p.gender, q.gender)
             if best is None or s > best[0]:
                 best = (s, reasons)
     score, reasons = best

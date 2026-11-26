@@ -84,10 +84,11 @@ placeholders = ["khali", "vacant", "nil", "null", "na", "none", "unknown", "hold
 # Name-final suffixes: a female suffix against the male suffix on the same stem is a conflict.
 pairs = [
   ["appa", "amma"], ["ayya", "amma"], ["aiah", "amma"], ["aiya", "amma"], ["anna", "amma"],
+  ["appa", "akka"], ["appa", "avva"],
   ["kumar", "kumari"], ["eshwar", "eshwari"], ["eswar", "eswari"], ["deva", "devi"], ["ar", "ari"], ["an", "ani"],
 ]
 # Endings only one gender takes; used when the records give no evidence for a name.
-female_suffixes = ["amma", "kumari", "devi", "bai", "begum", "eshwari", "eswari", "vathi", "vati", "lakshmi", "laxmi", "rani", "ben", "kaur"]
+female_suffixes = ["amma", "akka", "avva", "kumari", "devi", "bai", "begum", "eshwari", "eswari", "vathi", "vati", "lakshmi", "laxmi", "rani", "ben", "kaur"]
 male_suffixes = ["appa", "ayya", "aiah", "kumar", "swamy", "swami", "eshwar", "eswar"]
 
 [variants]

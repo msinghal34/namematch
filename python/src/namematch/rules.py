@@ -15,7 +15,8 @@ def _load_freq(name: str) -> tuple[dict[str, int], int]:
     """Key -> count, and the number of persons counted (the '# persons' header line)."""
     path = _DIR / name
     if not path.exists():
-        return {}, 0
+        # Every table ships with the package; a missing one would silently change scores.
+        raise FileNotFoundError(f"{path} is missing from the namematch package")
     out, persons = {}, 0
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("# persons"):
@@ -35,7 +36,7 @@ TOKEN_FREQ_EAASTHI, TOKEN_PERSONS_EAASTHI = _load_freq("token_freq_eaasthi.tsv")
 def _load_gender() -> dict[str, str]:
     path = _DIR / "name_gender.tsv"
     if not path.exists():
-        return {}
+        raise FileNotFoundError(f"{path} is missing from the namematch package")
     out = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if line and not line.startswith("#"):
