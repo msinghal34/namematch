@@ -7,6 +7,9 @@ It reads names the way a revenue officer does.
 Titles (Sri, Smt) and relation clauses (S/o, W/o, bin) are set aside, an initial may stand for a word, common spelling variants are understood, Kannada script is read, and one string may list several owners.
 Every result comes with a score, a band and the reasons behind it.
 
+Kannada and English spellings of the same name are matched the way they are written in Karnataka's records: ಪ್ರವೀಣ ಕುಮಾರ್ against PRAVEEN KUMAR, ಟಿ ಎನ್ ಗಿರಿಧರ ರಾವ್ against T N GIRIDHAR RAO, a word that switches script midway, and the usual Kannada renderings of English, Muslim and South Indian names.
+Where the two scripts cannot tell names apart (the same consonants with different vowels, as in Kritika and Kartik), the pair is sent for a check instead of being accepted, and Kannada's silent final vowel never joins names of opposite genders (Muniyamma and Muniyappa stay apart).
+
 The same rules ship as a **Java library** (Java 11 or newer, no dependencies) and a **Python library** (Python 3.11 or newer, no dependencies), and the two give identical results.
 
 ## Java
@@ -17,14 +20,14 @@ Maven:
 <dependency>
   <groupId>io.github.msinghal34</groupId>
   <artifactId>namematch</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation 'io.github.msinghal34:namematch:0.4.0'
+implementation 'io.github.msinghal34:namematch:0.5.0'
 ```
 
 Use:
@@ -104,7 +107,7 @@ r.ownersA().get(1).score();      // 0.244
 ## Command line
 
 ```sh
-java -jar namematch-0.4.0.jar "Ramesh S/o Krishna" "Ramesh S/o Gopal"
+java -jar namematch-0.5.0.jar "Ramesh S/o Krishna" "Ramesh S/o Gopal"
 python -m namematch "Ramesh S/o Krishna" "Ramesh S/o Gopal"
 ```
 
@@ -122,7 +125,7 @@ The scoring code exists in both languages, and the Python code is the reference.
 - `conformance/cases.jsonl` holds about 7,800 invented name pairs with every field of the Python result.
   The Java tests must reproduce all of them exactly, and the Python tests fail if the file is out of date with the rules.
 - `tools/compare_private.py pairs.tsv` runs both libraries over your own name pairs, on your machine, and compares every field.
-  The two matched on all 283,797 results from about 95,000 real record pairs.
+  The two matched on all 448,797 results from about 150,000 real record pairs, a third of them Kannada property records.
 
 To change a rule: change the Python code or `rules.toml`, bump the version, run `python conformance/make_cases.py`, make the same change in Java until `mvn verify` passes, and run `tools/compare_private.py` on real pairs.
 

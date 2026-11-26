@@ -28,39 +28,51 @@ final class Scorer {
     static final double MATCH_FLOOR = 0.70;   // token similarity below this is "not the same word"
     static final double NEAR_SIM = 0.75;      // a near-miss word (one letter slip in a short name) when it is allowed
     static final double NEAR_CAP = 0.64;      // ... and the most such a pair can score: "needs a check", never accepted
-    private static final int COMMON_FROM = 25;
-    private static final int MAX_FREQ = maxFreq();
+    /** A part counts as common from 25 sightings per 153,218 persons: the sample the weights were tuned on. */
+    private static final double COMMON_RATE = 25.0 / 153_218;
 
-    private static int maxFreq() {
-        int max = 1;
-        boolean any = false;
-        for (java.util.Map.Entry<String, Integer> e : Rules.TOKEN_FREQ.entrySet()) {
-            if (!e.getKey().equals("persons")) {
-                max = any ? Math.max(max, e.getValue()) : e.getValue();
+    private static final class Table {
+        final java.util.Map<String, Integer> freq;
+        final double common;
+        final int top;
+
+        Table(Rules.Freq f) {
+            this.freq = f.counts;
+            this.common = f.persons != 0 ? COMMON_RATE * f.persons : 25;
+            int max = 1;
+            boolean any = false;
+            for (int n : f.counts.values()) {
+                max = any ? Math.max(max, n) : n;
                 any = true;
             }
+            this.top = max;
         }
-        return max;
     }
+
+    /** The table the eaasthi_weights switch picks, worked out once. */
+    private static final Table TABLE =
+        new Table(Switches.EAASTHI_WEIGHTS && !Rules.TOKEN_FREQ_EAASTHI.counts.isEmpty() ? Rules.TOKEN_FREQ_EAASTHI : Rules.TOKEN_FREQ);
 
     /** 1.0 for a distinctive word, down to 0.35 for the commonest (kumar). */
     static double weight(String token) {
-        int n = Rules.TOKEN_FREQ.getOrDefault(Phonetic.key(token), 0);
-        if (n <= COMMON_FROM) {
+        int n = TABLE.freq.getOrDefault(Phonetic.key(token), 0);
+        if (n <= TABLE.common) {
             return 1.0;
         }
-        return 1.0 - 0.65 * Math.log((double) n / COMMON_FROM) / Math.log((double) MAX_FREQ / COMMON_FROM);
+        return 1.0 - 0.65 * Math.log(n / TABLE.common) / Math.log(TABLE.top / TABLE.common);
     }
 
     private static final class Unit {
         final BitSet idx;
         final String text;
         final double w;
+        final boolean kn;       // some word of it came from Kannada script
 
-        Unit(BitSet idx, String text, double w) {
+        Unit(BitSet idx, String text, double w, boolean kn) {
             this.idx = idx;
             this.text = text;
             this.w = w;
+            this.kn = kn;
         }
 
         int size() {
@@ -79,24 +91,26 @@ final class Scorer {
             }
             BitSet one = new BitSet();
             one.set(i);
-            out.add(new Unit(one, t.text, weight(t.text)));
+            out.add(new Unit(one, t.text, weight(t.text), t.kn));
             for (int j = i + 2; j <= i + 3; j++) {
                 if (j > n) {
                     continue;
                 }
                 boolean allFull = true;
+                boolean kn = false;
                 StringBuilder text = new StringBuilder();
                 double w = 0;
                 for (int k = i; k < j; k++) {
                     Token x = tokens.get(k);
                     allFull &= !x.initial;
+                    kn |= x.kn;
                     text.append(x.text);
                     w = k == i ? weight(x.text) : Math.max(w, weight(x.text));
                 }
                 if (allFull) {
                     BitSet run = new BitSet();
                     run.set(i, j);
-                    out.add(new Unit(run, text.toString(), w));
+                    out.add(new Unit(run, text.toString(), w, kn));
                 }
             }
         }
@@ -125,6 +139,21 @@ final class Scorer {
             this.score = score;
             this.reasons = reasons;
         }
+    }
+
+    /** Word similarity; a Kannada-written word against an English-written one uses Phonetic.crossSimilarity. */
+    private static double similar(String x, boolean xKn, String y, boolean yKn) {
+        if (Switches.CROSS_SCRIPT && xKn != yKn) {
+            return xKn ? Phonetic.crossSimilarity(x, y) : Phonetic.crossSimilarity(y, x);
+        }
+        return Phonetic.similarity(x, y);
+    }
+
+    private static boolean genderClash(Token x, Token y) {
+        if (Switches.CROSS_SCRIPT && x.kn != y.kn) {
+            return x.kn ? Phonetic.crossGenderConflict(x.text, y.text) : Phonetic.crossGenderConflict(y.text, x.text);
+        }
+        return Phonetic.genderConflict(x.text, y.text);
     }
 
     private static double total(List<Integer> idx, List<Token> tokens) {
@@ -160,15 +189,22 @@ final class Scorer {
         List<Unit> ub = units(b);
         List<Candidate> candidates = new ArrayList<>();
         Set<List<String>> nearPairs = new HashSet<>();
+        Set<List<String>> vowelPairs = new HashSet<>();   // Kannada vs English words with only the vowels different
         for (Unit x : ua) {
             for (Unit y : ub) {
                 if (x.size() > 1 && y.size() > 1) {
                     continue;
                 }
-                double s = Phonetic.similarity(x.text, y.text);
-                if (s < MATCH_FLOOR && near && x.size() == 1 && y.size() == 1 && Phonetic.nearMiss(x.text, y.text)) {
-                    s = NEAR_SIM;
-                    nearPairs.add(List.of(x.text, y.text));
+                double s = similar(x.text, x.kn, y.text, y.kn);
+                if (s < MATCH_FLOOR && near && x.size() == 1 && y.size() == 1) {
+                    if (Phonetic.nearMiss(x.text, y.text)) {
+                        s = NEAR_SIM;
+                        nearPairs.add(List.of(x.text, y.text));
+                    } else if (Switches.CROSS_SCRIPT && x.kn != y.kn
+                            && (x.kn ? Phonetic.crossVowelsOnly(x.text, y.text) : Phonetic.crossVowelsOnly(y.text, x.text))) {
+                        s = NEAR_SIM;
+                        vowelPairs.add(List.of(x.text, y.text));
+                    }
                 }
                 if (s >= MATCH_FLOOR) {
                     candidates.add(new Candidate(s, x.size() + y.size(), x, y));
@@ -193,6 +229,8 @@ final class Scorer {
             matchedW += w;
             if (nearPairs.contains(List.of(c.x.text, c.y.text))) {
                 reasons.add(c.x.text + "?" + c.y.text + " one letter apart");
+            } else if (vowelPairs.contains(List.of(c.x.text, c.y.text))) {
+                reasons.add(c.x.text + "?" + c.y.text + " vowels differ across scripts");
             } else if (!c.x.text.equals(c.y.text)) {
                 reasons.add(c.x.text + "~" + c.y.text + " " + Py.fixed(c.s, 2));
             }
@@ -295,7 +333,7 @@ final class Scorer {
         boolean genderClash = false;
         for (int i : freeA) {
             for (int j : freeB) {
-                if (Phonetic.genderConflict(a.get(i).text, b.get(j).text)) {
+                if (genderClash(a.get(i), b.get(j))) {
                     genderClash = true;
                     break;
                 }
@@ -440,6 +478,13 @@ final class Scorer {
             }
             if (s2 > first.score && slipped) {
                 return new Scored(s2, plus(second.reasons, "one-letter slip: needs a check"));
+            }
+            boolean vowels = false;
+            for (String r : second.reasons) {
+                vowels |= r.contains("vowels differ across scripts");
+            }
+            if (s2 > first.score && vowels) {
+                return new Scored(s2, plus(second.reasons, "spelling across scripts: needs a check"));
             }
         }
         return first;

@@ -28,10 +28,16 @@ final class Parser {
     static final class Token {
         final String text;
         final boolean initial;
+        final boolean kn;       // came from Kannada script (cross_script)
 
         Token(String text, boolean initial) {
+            this(text, initial, false);
+        }
+
+        Token(String text, boolean initial, boolean kn) {
             this.text = text;
             this.initial = initial;
+            this.kn = kn;
         }
 
         @Override
@@ -240,6 +246,7 @@ final class Parser {
     private static final Pattern DIGIT_WORDS = Py.re("[a-z]*\\d[a-z0-9]*");
     private static final Pattern A_TO_Z = Py.re("[a-z]");
     private static final Pattern JOINED_CAPS = Py.re("(?<![A-Za-z.])(MS|MR|SH|AN|NA)(?=\\s+[A-Z]{2,})");
+    private static final Pattern SCRIPT_EDGE = Py.re("(?<=[A-Za-z])(?=[\\u0c80-\\u0cff])|(?<=[\\u0c80-\\u0cff])(?=[A-Za-z])");
     private static final Pattern PIECES = Py.re("\\x01\\w+(?::[\\w/]+)?|m/s|[a-z]+");
 
     private static List<String> without(List<String> items, String drop) {
@@ -340,21 +347,21 @@ final class Parser {
     }
 
     /** Short vowel-less clusters are joined initials: 'ns' to N S, 'kb' to K B. */
-    private static List<Token> splitWord(String word) {
+    private static List<Token> splitWord(String word, boolean kn) {
         if (Switches.SPELLED_INITIALS && SPELLED_INITIALS.containsKey(word)) {
-            return List.of(new Token(SPELLED_INITIALS.get(word), true));
+            return List.of(new Token(SPELLED_INITIALS.get(word), true, kn));
         }
         if (word.length() == 1) {
-            return List.of(new Token(word, true));
+            return List.of(new Token(word, true, kn));
         }
         if (word.length() <= 3 && !hasVowel(word) && !Phonetic.VARIANT_WORDS.contains(word)) {
             List<Token> out = new ArrayList<>();
             for (char c : word.toCharArray()) {
-                out.add(new Token(String.valueOf(c), true));
+                out.add(new Token(String.valueOf(c), true, kn));
             }
             return out;
         }
-        return List.of(new Token(word, false));
+        return List.of(new Token(word, false, kn));
     }
 
     private static final class Cleaned {
@@ -367,7 +374,7 @@ final class Parser {
         }
     }
 
-    private static Cleaned cleanPerson(List<String> words) {
+    private static Cleaned cleanPerson(List<String> words, Set<String> kn) {
         String gender = "";
         List<String> original = words;
         // Leading honorifics, possibly several ("mr dr", "surg lt cdr").
@@ -392,7 +399,7 @@ final class Parser {
         }
         List<Token> tokens = new ArrayList<>();
         for (String w : kept) {
-            tokens.addAll(splitWord(w));
+            tokens.addAll(splitWord(w, kn.contains(w)));
         }
         return new Cleaned(tokens, gender);
     }
@@ -430,16 +437,26 @@ final class Parser {
     static ParsedName parse(String raw) {
         raw = raw == null ? "" : raw;
         String script = Translit.hasKannada(raw) ? "kannada" : "latin";
-        String latin = Translit.toLatin(raw);
+        String source = raw.replace(Translit.KN_OPEN, "").replace(Translit.KN_CLOSE, "");  // the markers mean something inside
+        if (Switches.SCRIPT_SPLIT) {
+            // 'Kಲಕ್ಷ್ಮಿ', 'ಗೀತಾM.S': a word that changes script is two words.
+            source = Py.sub(SCRIPT_EDGE, source, " ");
+        }
+        String latin = Translit.toLatin(source, Switches.CROSS_SCRIPT);
         // In capitals, a two-letter word without a dot before a name is joined initials, not a
         // title or "and": "MS RAMESH" = M S Ramesh, "AN RAMESH" = A N Ramesh.
         latin = Py.sub(JOINED_CAPS, latin, m -> m.group(1).charAt(0) + " " + m.group(1).charAt(1));
         String text = mark(latin.toLowerCase(Locale.ROOT));
         // Tokenise into markers and words; any other punctuation is whitespace.
+        text = text.replace("'", " ").replace("-", " ");
         List<String> pieces = new ArrayList<>();
-        Matcher pm = PIECES.matcher(text.replace("'", " ").replace("-", " "));
+        Set<String> kn = new HashSet<>();
+        Matcher pm = PIECES.matcher(text);
         while (pm.find()) {
             pieces.add(pm.group());
+            if (pm.start() > 0 && text.charAt(pm.start() - 1) == Translit.KN_OPEN.charAt(0)) {
+                kn.add(pm.group());
+            }
         }
 
         List<Segment> segments = new ArrayList<>();
@@ -518,7 +535,7 @@ final class Parser {
                             rest.add(w);
                         }
                     }
-                    Cleaned c = cleanPerson(rest);
+                    Cleaned c = cleanPerson(rest, kn);
                     if (anyFull(c.tokens)) {
                         persons.add(new Person(c.tokens, List.of(), List.of(), c.gender, "", "owner", true));
                     }
@@ -547,13 +564,13 @@ final class Parser {
                     if (meaningful.isEmpty()) {
                         placeholder = true;
                     } else {
-                        Cleaned c = cleanPerson(meaningful);
-                        List<Token> relTokens = seg.rel.isEmpty() ? List.of() : cleanPerson(seg.rel).tokens;
+                        Cleaned c = cleanPerson(meaningful, kn);
+                        List<Token> relTokens = seg.rel.isEmpty() ? List.of() : cleanPerson(seg.rel, kn).tokens;
                         Object rg = RELATIONS.get(seg.relKind);
                         String relGender = rg == null ? "" : (String) rg;
                         List<List<Token>> aliases = new ArrayList<>();
                         for (List<String> x : seg.alias) {
-                            List<Token> a = cleanPerson(x).tokens;
+                            List<Token> a = cleanPerson(x, kn).tokens;
                             if (!a.isEmpty()) {
                                 aliases.add(a);
                             }
@@ -575,7 +592,7 @@ final class Parser {
                         rest.add(w);
                     }
                 }
-                Cleaned c = cleanPerson(rest);
+                Cleaned c = cleanPerson(rest, kn);
                 if (anyFull(c.tokens)) {
                     reps.add(new Person(c.tokens, List.of(), List.of(), c.gender, "", "representative", false));
                 }

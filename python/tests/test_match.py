@@ -175,3 +175,83 @@ def test_one_letter_slip_goes_to_review_never_accepted():
     assert match("Mallappa", "Mallamma").band == "different"
     assert match("Salman", "Salma").band == "different"
     assert match("Praveen", "Pravin").band == "same"
+
+
+# v0.5.0: Kannada / English (names invented; each case mirrors a pattern in the eAasthi export).
+@pytest.mark.parametrize("a, b", [
+    ("PRAVEEN KUMAR", "ಪ್ರವೀಣ ಕುಮಾರ್"),            # Kannada's final short a is not a feminine ending
+    ("VINAY S", "ವಿನಯ ಎಸ್"),
+    ("Kಲಕ್ಷ್ಮಿ", "Smt K.Lakshmi"),                   # a word that changes script is two words
+    ("SOWMYA R", "ಸೌಮ್ಯ ಆರ್"),                      # ow ~ au
+    ("SHYLAJA M", "ಶೈಲಜಾ ಎಂ"),                      # y between consonants ~ ai
+    ("GNANA PRAKASH", "ಜ್ಞಾನ ಪ್ರಕಾಶ್"),             # ಜ್ಞ ~ gn
+    ("T N GIRIDHAR RAO", "ಟಿ ಎನ್ ಗಿರಿಧರ ರಾವ್"),      # rao ~ raav
+    ("NIRMAL DAS", "ನಿರ್ಮಲ್ ದ್ಯಾಸ್"),               # v0.5.0 (second decision): the English a written as ಯಾ
+    ("HAMSA VENI", "ಹಂಸ ವೇಣಿ"),                     # v0.5.0 (second decision): the nasal sign written m in English
+])
+def test_kannada_english_spellings_accepted(a, b):
+    assert match(a, b).score >= SAME, match(a, b)
+
+
+@pytest.mark.parametrize("a, b", [
+    ("MALLAPPA", "ಮಲ್ಲಮ್ಮ"),                         # opposite genders stay apart across scripts
+    ("Praveen", "Praveena"),                         # in one script the final a still marks a woman
+    ("KAMAL", "ಕೋಮಲ್"),                              # a short name's vowels still matter
+])
+def test_cross_script_keeps_its_guards(a, b):
+    assert match(a, b).score < SAME, match(a, b)
+
+
+@pytest.mark.parametrize("a, b", [
+    ("ROBERT D LOBO", "ರಾಬರ್ಟ್ ಡಿ ಲೋಬೊ"),            # vowels differ only: likely the same, but an officer checks
+    ("KARTIK", "ಕೃತಿಕಾ"),                             # the same consonants, a different name (Kritika)
+    ("PRITAM", "ಪ್ರತಿಮಾ"),                            # Pratima
+    ("PRAMILA", "ಪರಿಮಳ"),                             # Parimala
+])
+def test_vowels_only_across_scripts_goes_to_review_never_accepted(a, b):
+    r = match(a, b)
+    assert REVIEW <= r.score < 0.65, r
+
+
+@pytest.mark.parametrize("a, b", [
+    ("JNANESH", "ಜ್ಞಾನೇಶ್"),                           # jn ~ gn, both ways
+    ("GNANESH", "ಜ್ಞಾನೇಶ್"),
+    ("ಜ್ಙಾನೇಶ್", "ಜ್ಞಾನೇಶ್"),                          # ಜ್ಙ: a common misspelling of ಜ್ಞ
+    ("PRAJNA", "ಪ್ರಜ್ಞಾ"),                            # ಜ್ಞ inside a word: gn or jn in English
+    ("PRAGNA", "ಪ್ರಜ್ಞಾ"),
+    ("JNANA MURTHY", "GNANA MURTHY"),
+])
+def test_jn_and_gn_are_one_sound(a, b):
+    assert match(a, b).score >= SAME, match(a, b)
+
+
+def test_marker_characters_in_input_mean_nothing():
+    assert match("\x02RAMESH KUMAR", "Ramesh Kumar").score == match("RAMESH KUMAR", "Ramesh Kumar").score
+
+
+@pytest.mark.parametrize("a, b", [
+    ("RAJNI", "RAJINI"), ("RAJNI", "RAJANI"), ("SAJNI", "SAJANI"), ("RAJNI", "ರಜನಿ"),   # jn inside a word is j + n
+])
+def test_jn_inside_a_word_is_j_and_n(a, b):
+    assert match(a, b).score >= 0.80, match(a, b)
+
+
+def test_jn_rule_does_not_join_different_names():
+    assert match("RAJNI", "RAGINI").score < 0.80
+
+
+@pytest.mark.parametrize("a, b", [
+    ("ಲಕ್ಷ್ಮಯ್ಯ", "LAKSHMI"), ("ನರಸಮ್ಮ", "NARASIMHA"), ("ಮುನಿಯಮ್ಮ", "MUNIYAPPA"),       # gender endings across scripts
+    ("ಆದಿತ್ಯ", "ADITI"), ("ಸಲ್ಮ", "SALIM"), ("ಪ್ರಭ", "PRABHU"), ("ರತ್ನ", "RATAN"), ("ಹನುಮಕ್ಕ", "HANUMAN"),
+    ("ಶಿವಲಿಂಗಮ್", "SHIVALINGAMMA"),                                                     # through another reading
+])
+def test_kannada_gender_endings_keep_their_gender(a, b):
+    # Kannada's silent final a never joins names of opposite genders by a loose match.
+    assert match(a, b).score < 0.35, match(a, b)
+
+
+@pytest.mark.parametrize("a, b", [
+    ("ADITYA", "ಆದಿತ್ಯ"), ("SOWMYA", "ಸೌಮ್ಯ"), ("KAVYA", "ಕಾವ್ಯ"), ("CHAITANYA", "ಚೈತನ್ಯ"),
+])
+def test_names_ending_in_ya_still_match_across_scripts(a, b):
+    assert match(a, b).score >= SAME, match(a, b)

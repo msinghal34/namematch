@@ -8,6 +8,8 @@ other side of every comparison is written that way.
 import re
 import unicodedata
 
+from .switches import ON
+
 _VIRAMA = "್"
 _NUKTA = "಼"
 _ANUSVARA = "ಂ"
@@ -31,6 +33,7 @@ _CONSONANTS = {
     "ಶ": "sh", "ಷ": "sh", "ಸ": "s", "ಹ": "h", "ಳ": "l", "ೞ": "l",
 }
 _NUKTA_FORMS = {"ಜ": "z", "ಫ": "f"}
+_JNA = "\ue000"            # stands in for ಜ್ಞ while a run is read (kannada_jna)
 _DIGITS = {chr(0x0CE6 + i): str(i) for i in range(10)}
 
 # Cyrillic and Greek capitals that OCR or copy-paste leaves inside Latin names.
@@ -57,13 +60,18 @@ _LETTER_NAMES = {
 }
 
 
-def kannada_to_latin(text: str) -> str:
+# Put around each word that came from Kannada when the caller asks (parse, for cross_script).
+KN_OPEN, KN_CLOSE = "\x02", "\x03"
+
+
+def kannada_to_latin(text: str, mark: bool = False) -> str:
     """Transliterate each Kannada run; a run that spells a letter's name becomes that letter."""
     out = []
     for run in re.split(r"([\u0c80-\u0cff\u200c\u200d]+)", text):
         if run and has_kannada(run):
             latin = _kannada_run(run)
-            out.append(_LETTER_NAMES.get(latin, latin))
+            latin = _LETTER_NAMES.get(latin, latin)
+            out.append(KN_OPEN + latin + KN_CLOSE if mark else latin)
         else:
             out.append(run)
     return "".join(out)
@@ -71,13 +79,15 @@ def kannada_to_latin(text: str) -> str:
 
 def _kannada_run(text: str) -> str:
     out = []
+    if ON["kannada_jna"]:
+        text = text.replace("ಜ್ಞ", _JNA).replace("ಜ್ಙ", _JNA)     # ಜ್ಙ: a common misspelling of ಜ್ಞ
     chars = list(text)
     i = 0
     while i < len(chars):
         ch = chars[i]
         nxt = chars[i + 1] if i + 1 < len(chars) else ""
-        if ch in _CONSONANTS:
-            base = _CONSONANTS[ch]
+        if ch in _CONSONANTS or ch == _JNA:
+            base = "gn" if ch == _JNA else _CONSONANTS[ch]
             if nxt == _NUKTA:
                 base = _NUKTA_FORMS.get(ch, base)
                 i += 1
@@ -111,10 +121,11 @@ def _kannada_run(text: str) -> str:
     return "".join(out)
 
 
-def to_latin(text: str) -> str:
-    """Any supported script to plain ASCII-ish Latin, case preserved for Latin input."""
+def to_latin(text: str, mark: bool = False) -> str:
+    """Any supported script to plain ASCII-ish Latin, case preserved for Latin input.
+    mark=True wraps each word that came from Kannada in KN_OPEN ... KN_CLOSE."""
     text = unicodedata.normalize("NFC", text).translate(_HOMOGLYPHS)
     if has_kannada(text):
-        text = kannada_to_latin(text)
+        text = kannada_to_latin(text, mark)
     decomposed = unicodedata.normalize("NFKD", text)
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))

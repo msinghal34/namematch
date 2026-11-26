@@ -97,6 +97,6 @@ class ConformanceTest {
 
     @Test
     void versionComesFromTheSharedRules() {
-        assertEquals("0.4.0", NameMatch.VERSION);
+        assertEquals("0.5.0", NameMatch.VERSION);
     }
 }

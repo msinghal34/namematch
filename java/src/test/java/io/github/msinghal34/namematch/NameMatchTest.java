@@ -106,4 +106,25 @@ class NameMatchTest {
             pool.shutdown();
         }
     }
+
+    @Test
+    void kannadaAndEnglishSpellingsOfOneNameMatch() {
+        assertTrue(NameMatch.match("PRAVEEN KUMAR", "ಪ್ರವೀಣ ಕುಮಾರ್").isAccepted());
+        assertTrue(NameMatch.match("T N GIRIDHAR RAO", "ಟಿ ಎನ್ ಗಿರಿಧರ ರಾವ್").isAccepted());
+        assertTrue(NameMatch.match("Kಲಕ್ಷ್ಮಿ", "Smt K.Lakshmi").isAccepted());
+    }
+
+    @Test
+    void differentNamesWithTheSameConsonantsGoToReviewNotAccept() {
+        MatchResult r = NameMatch.match("KARTIK", "ಕೃತಿಕಾ");
+        assertEquals(Band.REVIEW, r.band());
+        assertTrue(r.reasons().contains("spelling across scripts: needs a check"));
+    }
+
+    @Test
+    void oppositeGendersStayApartAcrossScripts() {
+        assertEquals(Band.DIFFERENT, NameMatch.match("MUNIYAPPA", "ಮುನಿಯಮ್ಮ").band());
+        assertEquals(Band.DIFFERENT, NameMatch.match("ADITI", "ಆದಿತ್ಯ").band());
+        assertEquals(Band.DIFFERENT, NameMatch.match("SHIVALINGAMMA", "ಶಿವಲಿಂಗಮ್").band());
+    }
 }

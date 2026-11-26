@@ -21,7 +21,10 @@ final class Rules {
 
     static final Map<String, Object> RULES = Collections.unmodifiableMap(Toml.parse(read("rules.toml")));
     static final String VERSION = (String) RULES.get("version");
-    static final Map<String, Integer> TOKEN_FREQ = loadFreq();
+    /** How common each name part is, and how many persons were counted: the original sample ... */
+    static final Freq TOKEN_FREQ = loadFreq("token_freq.tsv");
+    /** ... and the eAasthi export (1.2 million properties); the eaasthi_weights switch picks this one. */
+    static final Freq TOKEN_FREQ_EAASTHI = loadFreq("token_freq_eaasthi.tsv");
     static final Map<String, String> NAME_GENDER = loadGender();
 
     @SuppressWarnings("unchecked")
@@ -64,13 +67,31 @@ final class Rules {
         return out;
     }
 
-    private static Map<String, Integer> loadFreq() {
-        Map<String, Integer> out = new HashMap<>();
-        for (String line : dataLines("token_freq.tsv")) {
-            String[] f = line.split("\t", -1);
-            out.put(f[0], Integer.parseInt(f[1]));
+    static final class Freq {
+        final Map<String, Integer> counts;
+        final int persons;
+
+        Freq(Map<String, Integer> counts, int persons) {
+            this.counts = counts;
+            this.persons = persons;
         }
-        return Collections.unmodifiableMap(out);
+    }
+
+    private static Freq loadFreq(String name) {
+        String text = read(name);
+        Map<String, Integer> out = new HashMap<>();
+        int persons = 0;
+        if (text != null) {
+            for (String line : text.split("\r\n|\n|\r", -1)) {
+                if (line.startsWith("# persons")) {
+                    persons = Integer.parseInt(line.split("\t", -1)[1]);
+                } else if (!line.isEmpty() && !line.startsWith("#")) {
+                    String[] f = line.split("\t", -1);
+                    out.put(f[0], Integer.parseInt(f[1]));
+                }
+            }
+        }
+        return new Freq(Collections.unmodifiableMap(out), persons);
     }
 
     private static Map<String, String> loadGender() {

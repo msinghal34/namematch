@@ -52,7 +52,15 @@ _REWRITES = [
 _REWRITES = [(re.compile(p), r) for p, r in _REWRITES]
 
 
+_MINED = {}
+for group in RULES["variants"].get("mined_groups", []):
+    for member in group:
+        _MINED.setdefault(member, _VARIANT.get(group[0], group[0]))
+
+
 def canonical(token: str) -> str:
+    if ON["mined_variants"] and token in _MINED and token not in _VARIANT:
+        return _MINED[token]
     return _VARIANT.get(token, token)
 
 
@@ -90,7 +98,22 @@ def gender_of(token: str) -> str:
     return ""
 
 
+_OW = re.compile(r"ow(?=[^aeiou]|$)")
+_JN = re.compile(r"^jn")
+_Y_VOWEL = re.compile(r"(?<=[^aeiou])y(?=[^aeiouy])")
+
+
 def _fold(t: str, endings: bool = True) -> str:
+    # Before the ordered rewrites, which turn w into v and would hide 'ow' (sowmya, gowri).
+    if ON["ow_vowel"]:
+        t = _OW.sub("au", t)
+    if ON["y_vowel"]:
+        t = _Y_VOWEL.sub("ai", t)
+    if ON["kannada_jna"]:
+        # Only at the start of a word: jnana / gnana, jnanesh / gnanesh. Inside a word jn is usually
+        # j + n (Rajni, Sajni, Anjna), so it is left alone there; ಜ್ಞ inside a Kannada word is handled
+        # by _readings.
+        t = _JN.sub("gn", t)
     for _ in range(2):          # second pass catches endings exposed by the first ('bhimaiaha')
         for pattern, repl in _REWRITES:
             t = pattern.sub(repl, t)
@@ -232,3 +255,88 @@ def initial_of(token: str) -> set[str]:
     if first in "ei":
         alts |= {"e", "i"}
     return alts
+
+
+# Gender endings whose final a is part of the ending, never Kannada's silent final a: the a-final ones in
+# rules.toml (amma, appa, ayya) and the Kannada kinship endings -akka and -avva (Hanumakka, Basavva).
+_GENDER_SUFFIXES = tuple(e for e in _FEMALE_END + _MALE_END if e.endswith("a")) + ("akka", "avva")
+_CONSONANT_Y = re.compile(r"[^aeiou]y$")
+
+
+def _inherent_a(k: str) -> bool:
+    """A Kannada word's final short a (ವಿನಯ -> 'vinaya'), which English spelling usually drops and
+    which does not say the name is female; a long final aa (ಸವಿತಾ -> 'savitaa') is left alone, and so
+    is the a of a gender ending (-amma, -appa, -ayya: ಮುನಿಯಮ್ಮ is not 'muniyamm')."""
+    if len(k) <= 3 or not k.endswith("a") or k.endswith("aa") or k.endswith(_GENDER_SUFFIXES):
+        return False
+    # Not when what is left ends in consonant + y: 'adity' would read as 'aditi' (Aditya, a man, vs Aditi).
+    return not _CONSONANT_Y.search(k[:-1])
+
+
+def cross_gender_conflict(k: str, latin: str) -> bool:
+    """Gender conflict between a word written in Kannada (k) and one written in English: with a final
+    short a in Kannada, both readings (with and without it) must conflict."""
+    return gender_conflict(k, latin) and (not _inherent_a(k) or gender_conflict(k[:-1], latin))
+
+
+_YAA = re.compile(r"(?<=[^aeiouy])y(?=aa)")
+_NASAL_N = re.compile(r"n(?=[^aeiouyn])")
+
+
+def _readings(k: str) -> list[str]:
+    """Other ways the Kannada-written word k may be the English spelling of the same name: Kannada writes
+    the English 'a' of Das or Jan as ಯಾ ('dyaas', 'jyaan'), and its nasal sign before a consonant comes
+    out as n where English writes m (ಹಂಸ 'hansa' ~ Hamsa, ಇಂತಿಯಾಜ್ ~ Imtiaz). Each pattern was seen in 15 or
+    more different names in the eAasthi export."""
+    out = {k}
+    if ON["cross_readings"]:
+        for f in (lambda t: _YAA.sub("", t), lambda t: _NASAL_N.sub("m", t)):
+            out |= {f(t) for t in out}
+    if ON["kannada_jna"]:
+        # ಜ್ಞ is written gn (Pragna) or jn (Prajna) in English; translit gives gn.
+        out |= {t.replace("gn", "jn") for t in out}
+    return sorted(out)
+
+
+@lru_cache(maxsize=500_000)
+def cross_similarity(k: str, latin: str) -> float:
+    """similarity() for a word written in Kannada (k) against one written in English (cross_script).
+    Kannada's final short a may be the English name without it (ಪ್ರವೀಣ ~ Praveen), and _readings gives
+    the other ways the Kannada spelling may stand for the English one; any of them counts as a spelling
+    variant (at most 0.95). Vowels-only differences are cross_vowels_only, which only sends a pair to an
+    officer."""
+    s = similarity(k, latin)
+    gk, gl = gender_of(k), gender_of(latin)
+    # Names of opposite genders (Salma / Salim, ಶಿವಲಿಂಗಮ್ / Shivalingamma) may meet through another reading
+    # only where that reading gives the English name itself, not a loose match: a reading can turn the
+    # word into one of unknown gender, which would otherwise slip past the gender check.
+    opposite = bool(gk and gl and gk != gl) or gender_conflict(k, latin)
+
+    def counts(score):
+        return not opposite or score >= 0.95
+
+    for r in _readings(k):
+        if r != k:                                  # another reading: a spelling variant at best
+            other = similarity(r, latin)
+            if counts(other):
+                s = max(s, min(other, 0.95))
+        if _inherent_a(r):
+            stripped = similarity(r[:-1], latin)
+            if counts(stripped):
+                s = max(s, min(stripped, 0.95))
+    return s
+
+
+@lru_cache(maxsize=500_000)
+def cross_vowels_only(k: str, latin: str) -> bool:
+    """A Kannada-written word and an English one with the same consonants in the same order (at least
+    four sounds) and only the vowels different: English names spelled by sound in Kannada look like this
+    (ಎಡಿಸನ್ 'edisan' ~ Edison), but so do different names (ಕೃತಿಕಾ Kritika ~ Kartik, ಪರಿಮಳ Parimala ~
+    Pramila). So it only sends a pair to an officer (score.person_score caps it below 0.65), never
+    accepts it."""
+    for r in _readings(k):
+        if not cross_gender_conflict(r, latin):
+            rk, rl = raw_key(r), raw_key(latin)
+            if skeleton(rk) == skeleton(rl) and len(skeleton(rk)) >= 4:
+                return True
+    return False

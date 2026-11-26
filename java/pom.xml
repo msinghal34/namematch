@@ -6,7 +6,7 @@
 
   <groupId>io.github.msinghal34</groupId>
   <artifactId>namematch</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
   <packaging>jar</packaging>
 
   <name>namematch</name>
@@ -65,6 +65,7 @@
           <include>rules.toml</include>
           <include>token_freq.tsv</include>
           <include>name_gender.tsv</include>
+          <include>token_freq_eaasthi.tsv</include>
         </includes>
       </resource>
     </resources>

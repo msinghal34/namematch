@@ -37,6 +37,12 @@ final class Translit {
         0x0CAF, "y", 0x0CB0, "r", 0x0CB1, "r", 0x0CB2, "l", 0x0CB5, "v",
         0x0CB6, "sh", 0x0CB7, "sh", 0x0CB8, "s", 0x0CB9, "h", 0x0CB3, "l", 0x0CDE, "l");
     private static final Map<Integer, String> NUKTA_FORMS = map(0x0C9C, "z", 0x0CAB, "f");
+    /** Stands in for ಜ್ಞ (and its misspelling ಜ್ಙ) while a run is read (kannada_jna). */
+    private static final int JNA = 0xE000;
+
+    /** Put around each word that came from Kannada when the caller asks (Parser, for cross_script). */
+    static final String KN_OPEN = "\u0002";
+    static final String KN_CLOSE = "\u0003";
 
     /** Cyrillic and Greek capitals that OCR or copy-paste leaves inside Latin names. */
     private static final Map<Integer, String> HOMOGLYPHS = map(
@@ -80,6 +86,10 @@ final class Translit {
 
     /** Transliterate each Kannada run; a run that spells a letter's name becomes that letter. */
     static String kannadaToLatin(String text) {
+        return kannadaToLatin(text, false);
+    }
+
+    static String kannadaToLatin(String text, boolean mark) {
         StringBuilder out = new StringBuilder();
         int[] cps = text.codePoints().toArray();
         int k = 0;
@@ -92,7 +102,8 @@ final class Translit {
             String part = new String(cps, start, k - start);
             if (run && hasKannada(part)) {
                 String latin = kannadaRun(cps, start, k);
-                out.append(LETTER_NAMES.getOrDefault(latin, latin));
+                latin = LETTER_NAMES.getOrDefault(latin, latin);
+                out.append(mark ? KN_OPEN + latin + KN_CLOSE : latin);
             } else {
                 out.append(part);
             }
@@ -104,13 +115,19 @@ final class Translit {
         return isKannada(cp) || cp == ZWNJ || cp == ZWJ;
     }
 
-    private static String kannadaRun(int[] cps, int from, int to) {
+    private static String kannadaRun(int[] all, int from0, int to0) {
+        int[] cps = java.util.Arrays.copyOfRange(all, from0, to0);
+        if (Switches.KANNADA_JNA) {
+            cps = replaceJna(cps);
+        }
+        int from = 0;
+        int to = cps.length;
         StringBuilder out = new StringBuilder();
         int i = from;
         while (i < to) {
             int ch = cps[i];
             int nxt = i + 1 < to ? cps[i + 1] : -1;
-            String base = CONSONANTS.get(ch);
+            String base = ch == JNA ? "gn" : CONSONANTS.get(ch);
             if (base != null) {
                 if (nxt == NUKTA) {
                     base = NUKTA_FORMS.getOrDefault(ch, base);
@@ -154,8 +171,28 @@ final class Translit {
         return out.toString();
     }
 
+    /** ಜ್ಞ and ಜ್ಙ (a common misspelling of it) as one JNA code point, like Python's str.replace. */
+    private static int[] replaceJna(int[] cps) {
+        int[] out = new int[cps.length];
+        int n = 0;
+        for (int i = 0; i < cps.length; i++) {
+            if (i + 2 < cps.length && cps[i] == 0x0C9C && cps[i + 1] == VIRAMA && (cps[i + 2] == 0x0C9E || cps[i + 2] == 0x0C99)) {
+                out[n++] = JNA;
+                i += 2;
+            } else {
+                out[n++] = cps[i];
+            }
+        }
+        return java.util.Arrays.copyOf(out, n);
+    }
+
     /** Any supported script to plain ASCII-ish Latin, case preserved for Latin input. */
     static String toLatin(String text) {
+        return toLatin(text, false);
+    }
+
+    /** As {@link #toLatin(String)}; mark=true wraps each word that came from Kannada in KN_OPEN ... KN_CLOSE. */
+    static String toLatin(String text, boolean mark) {
         String nfc = Normalizer.normalize(text, Normalizer.Form.NFC);
         StringBuilder t = new StringBuilder(nfc.length());
         nfc.codePoints().forEach(cp -> {
@@ -168,7 +205,7 @@ final class Translit {
         });
         String s = t.toString();
         if (hasKannada(s)) {
-            s = kannadaToLatin(s);
+            s = kannadaToLatin(s, mark);
         }
         String decomposed = Normalizer.normalize(s, Normalizer.Form.NFKD);
         StringBuilder out = new StringBuilder(decomposed.length());

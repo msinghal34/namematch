@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -119,7 +120,23 @@ final class Phonetic {
         return s.isEmpty() ? fallback : s;
     }
 
+    /** rules.toml variants.mined_groups (mined_variants): the first group naming a word wins. */
+    private static final Map<String, String> MINED = new HashMap<>();
+
+    static {
+        @SuppressWarnings("unchecked")
+        List<List<String>> mined = (List<List<String>>) Rules.table("variants").getOrDefault("mined_groups", List.of());
+        for (List<String> group : mined) {
+            for (String member : group) {
+                MINED.putIfAbsent(member, VARIANT.getOrDefault(group.get(0), group.get(0)));
+            }
+        }
+    }
+
     static String canonical(String token) {
+        if (Switches.MINED_VARIANTS && MINED.containsKey(token) && !VARIANT.containsKey(token)) {
+            return MINED.get(token);
+        }
         return VARIANT.getOrDefault(token, token);
     }
 
@@ -163,7 +180,22 @@ final class Phonetic {
         return "";
     }
 
+    private static final Pattern OW = Py.re("ow(?=[^aeiou]|$)");
+    private static final Pattern JN = Py.re("^jn");
+    private static final Pattern Y_VOWEL = Py.re("(?<=[^aeiou])y(?=[^aeiouy])");
+
     static String fold(String t, boolean endings) {
+        // Before the ordered rewrites, which turn w into v and would hide 'ow' (sowmya, gowri).
+        if (Switches.OW_VOWEL) {
+            t = Py.sub(OW, t, "au");
+        }
+        if (Switches.Y_VOWEL) {
+            t = Py.sub(Y_VOWEL, t, "ai");
+        }
+        if (Switches.KANNADA_JNA) {
+            // Only at the start of a word (jnana / gnana); inside a word jn is usually j + n (Rajni).
+            t = Py.sub(JN, t, "gn");
+        }
         for (int pass = 0; pass < 2; pass++) {   // second pass catches endings exposed by the first ('bhimaiaha')
             for (Rewrite r : REWRITES) {
                 t = r.apply(t);
@@ -388,5 +420,124 @@ final class Phonetic {
             alts.add("i");
         }
         return alts;
+    }
+
+    // ---- v0.5.0: a Kannada-written word against an English-written one --------------------------
+
+    /**
+     * Gender endings whose final a is part of the ending, never Kannada's silent final a: the a-final ones
+     * in rules.toml (amma, appa, ayya) and the Kannada kinship endings -akka and -avva.
+     */
+    private static final List<String> GENDER_SUFFIXES = genderSuffixes();
+    private static final Pattern CONSONANT_Y = Py.re("[^aeiou]y$");
+    private static final Pattern YAA = Py.re("(?<=[^aeiouy])y(?=aa)");
+    private static final Pattern NASAL_N = Py.re("n(?=[^aeiouyn])");
+    private static final Memo<List<String>, Double> CROSS_SIMILARITY =
+        new Memo<>(500_000, kl -> computeCrossSimilarity(kl.get(0), kl.get(1)));
+    private static final Memo<List<String>, Boolean> CROSS_VOWELS_ONLY =
+        new Memo<>(500_000, kl -> computeCrossVowelsOnly(kl.get(0), kl.get(1)));
+
+    private static List<String> genderSuffixes() {
+        List<String> out = new ArrayList<>();
+        for (String e : FEMALE_END) {
+            if (e.endsWith("a")) {
+                out.add(e);
+            }
+        }
+        for (String e : MALE_END) {
+            if (e.endsWith("a")) {
+                out.add(e);
+            }
+        }
+        out.add("akka");
+        out.add("avva");
+        return out;
+    }
+
+    /**
+     * A Kannada word's final short a (ವಿನಯ to 'vinaya'), which English spelling usually drops and which does
+     * not say the name is female; a long final aa, a gender ending, or a stem ending in consonant + y keep it.
+     */
+    static boolean inherentA(String k) {
+        if (k.length() <= 3 || !k.endsWith("a") || k.endsWith("aa")) {
+            return false;
+        }
+        for (String e : GENDER_SUFFIXES) {
+            if (k.endsWith(e)) {
+                return false;
+            }
+        }
+        return !CONSONANT_Y.matcher(k.substring(0, k.length() - 1)).find();
+    }
+
+    /** With a Kannada final short a, both readings (with and without it) must conflict. */
+    static boolean crossGenderConflict(String k, String latin) {
+        return genderConflict(k, latin) && (!inherentA(k) || genderConflict(k.substring(0, k.length() - 1), latin));
+    }
+
+    /** Other ways the Kannada-written word may be the English spelling of the same name, sorted. */
+    static List<String> readings(String k) {
+        Set<String> out = new TreeSet<>();
+        out.add(k);
+        if (Switches.CROSS_READINGS) {
+            for (Pattern p : List.of(YAA, NASAL_N)) {
+                String repl = p == YAA ? "" : "m";
+                for (String t : new ArrayList<>(out)) {
+                    out.add(Py.sub(p, t, repl));
+                }
+            }
+        }
+        if (Switches.KANNADA_JNA) {
+            for (String t : new ArrayList<>(out)) {
+                out.add(t.replace("gn", "jn"));
+            }
+        }
+        return new ArrayList<>(out);
+    }
+
+    /** similarity() for a word written in Kannada (k) against one written in English (cross_script). */
+    static double crossSimilarity(String k, String latin) {
+        return CROSS_SIMILARITY.get(Arrays.asList(k, latin));
+    }
+
+    private static double computeCrossSimilarity(String k, String latin) {
+        double s = similarity(k, latin);
+        String gk = genderOf(k);
+        String gl = genderOf(latin);
+        // Names of opposite genders may meet through another reading only where it gives the English name itself.
+        boolean opposite = (!gk.isEmpty() && !gl.isEmpty() && !gk.equals(gl)) || genderConflict(k, latin);
+        for (String r : readings(k)) {
+            if (!r.equals(k)) {
+                double other = similarity(r, latin);
+                if (!opposite || other >= 0.95) {
+                    s = Math.max(s, Math.min(other, 0.95));
+                }
+            }
+            if (inherentA(r)) {
+                double stripped = similarity(r.substring(0, r.length() - 1), latin);
+                if (!opposite || stripped >= 0.95) {
+                    s = Math.max(s, Math.min(stripped, 0.95));
+                }
+            }
+        }
+        return s;
+    }
+
+    /** The same consonants in the same order (at least four sounds), only the vowels different: review, never accept. */
+    static boolean crossVowelsOnly(String k, String latin) {
+        return CROSS_VOWELS_ONLY.get(Arrays.asList(k, latin));
+    }
+
+    private static boolean computeCrossVowelsOnly(String k, String latin) {
+        for (String r : readings(k)) {
+            if (!crossGenderConflict(r, latin)) {
+                String rk = rawKey(r);
+                String rl = rawKey(latin);
+                if (skeleton(rk).equals(skeleton(rl)) && skeleton(rk).length() >= 4) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

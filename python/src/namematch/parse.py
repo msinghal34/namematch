@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from .phonetic import canonical
 from .rules import RULES
 from .switches import ON
-from .translit import has_kannada, to_latin
+from .translit import KN_CLOSE, KN_OPEN, has_kannada, to_latin
 
 _L = RULES["lists"]
 _HONORIFICS = set(RULES["honorifics"])
@@ -28,6 +28,8 @@ _VOWELS = set("aeiouy")
 _SPELLED_INITIALS = {"em": "m", "en": "n", "es": "s", "el": "l", "aar": "r", "ech": "h", "hech": "h", "jee": "g"}
 _FILLER = {"his", "her", "their", "its", "the", "holder", "gpa", "by", "of", "power", "attorney", "agreement", "sale"}
 
+_SCRIPT_EDGE = re.compile(r"(?<=[A-Za-z])(?=[\u0c80-\u0cff])|(?<=[\u0c80-\u0cff])(?=[A-Za-z])")
+
 # Marker tokens inserted into the text before tokenising.
 SEP, REL, REP, ALIAS = "\x01sep", "\x01rel", "\x01rep", "\x01alias"
 
@@ -36,6 +38,7 @@ SEP, REL, REP, ALIAS = "\x01sep", "\x01rel", "\x01rep", "\x01alias"
 class Token:
     text: str
     initial: bool
+    kn: bool = False            # came from Kannada script (cross_script)
 
     def __repr__(self) -> str:
         return self.text.upper() + "." if self.initial else self.text
@@ -167,18 +170,18 @@ def _join_letters(words: list[str]) -> list[str]:
     return [w for w in out if w not in ("p",)]
 
 
-def _split_word(word: str) -> list[Token]:
+def _split_word(word: str, kn: bool = False) -> list[Token]:
     """Short vowel-less clusters are joined initials: 'ns' -> N S, 'kb' -> K B."""
     if ON["spelled_initials"] and word in _SPELLED_INITIALS:
-        return [Token(_SPELLED_INITIALS[word], True)]
+        return [Token(_SPELLED_INITIALS[word], True, kn)]
     if len(word) == 1:
-        return [Token(word, True)]
+        return [Token(word, True, kn)]
     if len(word) <= 3 and not (set(word) & _VOWELS) and word not in _VARIANT_WORDS:
-        return [Token(c, True) for c in word]
-    return [Token(word, False)]
+        return [Token(c, True, kn) for c in word]
+    return [Token(word, False, kn)]
 
 
-def _clean_person(words: list[str]) -> tuple[list[Token], str]:
+def _clean_person(words: list[str], kn: frozenset = frozenset()) -> tuple[list[Token], str]:
     gender = ""
     original = words
     # Leading honorifics, possibly several ("mr dr", "surg lt cdr").
@@ -191,7 +194,7 @@ def _clean_person(words: list[str]) -> tuple[list[Token], str]:
     words = [w for w in words if w not in _HONORIFICS_ANYWHERE]
     if not words and original and original[-1] in _TITLE_OR_NAME:
         words = original[-1:]           # "Miss Kumari": the title word is the name
-    tokens = [t for w in words for t in _split_word(w)]
+    tokens = [t for w in words for t in _split_word(w, w in kn)]
     return tokens, gender
 
 
@@ -202,13 +205,23 @@ def _is_org(words: list[str], raw_segment: str) -> bool:
 def parse(raw: str) -> ParsedName:
     raw = raw or ""
     script = "kannada" if has_kannada(raw) else "latin"
-    latin = to_latin(raw)
+    source = raw.replace(KN_OPEN, "").replace(KN_CLOSE, "")       # the markers mean something inside
+    if ON["script_split"]:
+        # 'Kಲಕ್ಷ್ಮಿ', 'ಗೀತಾM.S': a word that changes script is two words.
+        source = _SCRIPT_EDGE.sub(" ", source)
+    latin = to_latin(source, mark=ON["cross_script"])
     # In capitals, a two-letter word without a dot before a name is joined initials, not a
     # title or "and": "MS RAMESH" = M S Ramesh, "AN RAMESH" = A N Ramesh.
     latin = re.sub(r"(?<![A-Za-z.])(MS|MR|SH|AN|NA)(?=\s+[A-Z]{2,})", lambda m: " ".join(m.group(1)), latin)
     text = _mark(latin.lower())
     # Tokenise into markers and words; any other punctuation is whitespace.
-    pieces = re.findall(r"\x01\w+(?::[\w/]+)?|m/s|[a-z]+", text.replace("'", " ").replace("-", " "))
+    text = text.replace("'", " ").replace("-", " ")
+    pieces, kn_words = [], set()
+    for m in re.finditer(r"\x01\w+(?::[\w/]+)?|m/s|[a-z]+", text):
+        pieces.append(m.group(0))
+        if m.start() > 0 and text[m.start() - 1] == KN_OPEN:
+            kn_words.add(m.group(0))
+    kn = frozenset(kn_words)
 
     segments: list[dict] = []
     current = None
@@ -268,7 +281,7 @@ def parse(raw: str) -> ParsedName:
         if words:
             segment_text = " ".join(words)
             if words[0] == "m/s" and not any(w in _ORG_WORDS for w in words):
-                tokens, gender = _clean_person([w for w in words[1:] if w not in _PLACEHOLDERS])
+                tokens, gender = _clean_person([w for w in words[1:] if w not in _PLACEHOLDERS], kn)
                 if any(not t.initial for t in tokens):
                     persons.append(Person(tokens, gender=gender, firm=True))
             elif _is_org(words, segment_text):
@@ -280,17 +293,17 @@ def parse(raw: str) -> ParsedName:
                 if not meaningful:
                     placeholder = True
                 else:
-                    tokens, gender = _clean_person(meaningful)
-                    rel_tokens, _ = _clean_person(seg["rel"]) if seg["rel"] else ([], "")
+                    tokens, gender = _clean_person(meaningful, kn)
+                    rel_tokens, _ = _clean_person(seg["rel"], kn) if seg["rel"] else ([], "")
                     rel_gender = _REL_GENDER.get(seg["rel_kind"], "")
-                    aliases = [a for a in (_clean_person(x)[0] for x in seg["alias"]) if a]
+                    aliases = [a for a in (_clean_person(x, kn)[0] for x in seg["alias"]) if a]
                     p = Person(tokens, aliases, rel_tokens, gender or rel_gender, relation=seg["rel_kind"])
                     if any(not t.initial for t in tokens) or p.aliases:
                         persons.append(p)
                     elif tokens and not persons and not seg["rep"]:
                         persons.append(p)
         if seg["rep"]:
-            tokens, gender = _clean_person([w for w in seg["rep"] if w not in _PLACEHOLDERS and w not in _FILLER])
+            tokens, gender = _clean_person([w for w in seg["rep"] if w not in _PLACEHOLDERS and w not in _FILLER], kn)
             if any(not t.initial for t in tokens):
                 reps.append(Person(tokens, gender=gender, role="representative"))
     return ParsedName(raw, persons, orgs, reps, placeholder and not persons and not orgs, script)

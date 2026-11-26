@@ -21,6 +21,7 @@ OUT = Path(__file__).resolve().parent / "cases.jsonl"
 MODES = ("any", "all_a", "all")
 SEED = 2026
 GENERATED = 2500
+MIXED = 600
 
 HAND = [
     ("R.SUNDARAM", "Sundaram R"),
@@ -118,6 +119,19 @@ HAND = [
     ("Thiru Selvi", "Selvi D/o Murugan"),
     ("Kiran Kumar S/o Gopal", "Kiran Kumar Gopal"),
     ("M/s Kiran Kumar", "Kiran Kumar Traders"),
+    # v0.5.0: Kannada / English
+    ("PRAVEEN KUMAR", "ಪ್ರವೀಣ ಕುಮಾರ್"), ("VINAY S", "ವಿನಯ ಎಸ್"), ("Kಲಕ್ಷ್ಮಿ", "Smt K.Lakshmi"), ("ಗೀತಾM.S", "Geetha M S"),
+    ("SOWMYA R", "ಸೌಮ್ಯ ಆರ್"), ("SHYLAJA M", "ಶೈಲಜಾ ಎಂ"), ("GNANA PRAKASH", "ಜ್ಞಾನ ಪ್ರಕಾಶ್"), ("JNANESH", "ಜ್ಞಾನೇಶ್"),
+    ("GNANESH", "ಜ್ಞಾನೇಶ್"), ("ಜ್ಙಾನೇಶ್", "ಜ್ಞಾನೇಶ್"), ("PRAJNA", "ಪ್ರಜ್ಞಾ"), ("PRAGNA", "ಪ್ರಜ್ಞಾ"), ("JNANA MURTHY", "GNANA MURTHY"),
+    ("RAJNI", "RAJINI"), ("RAJNI", "ರಜನಿ"), ("RAJNI", "RAGINI"), ("SAJNI", "SAJANI"), ("PRAJNA", "PRAGNA"),
+    ("T N GIRIDHAR RAO", "ಟಿ ಎನ್ ಗಿರಿಧರ ರಾವ್"), ("ROBERT D LOBO", "ರಾಬರ್ಟ್ ಡಿ ಲೋಬೊ"), ("NIRMAL DAS", "ನಿರ್ಮಲ್ ದ್ಯಾಸ್"),
+    ("HAMSA VENI", "ಹಂಸ ವೇಣಿ"), ("IMTIAZ AHMED", "ಇಂತಿಯಾಜ್ ಅಹ್ಮದ್"), ("SHYAM SUNDAR", "ಶ್ಯಾಮ್ ಸುಂದರ್"),
+    ("KARTIK", "ಕೃತಿಕಾ"), ("PRITAM", "ಪ್ರತಿಮಾ"), ("PRAMILA", "ಪರಿಮಳ"), ("KAMAL", "ಕೋಮಲ್"), ("MALLAPPA", "ಮಲ್ಲಮ್ಮ"),
+    ("LAKSHMI", "ಲಕ್ಷ್ಮಯ್ಯ"), ("NARASIMHA", "ನರಸಮ್ಮ"), ("MUNIYAPPA", "ಮುನಿಯಮ್ಮ"), ("ADITI", "ಆದಿತ್ಯ"), ("SALIM", "ಸಲ್ಮ"),
+    ("PRABHU", "ಪ್ರಭ"), ("RATAN", "ರತ್ನ"), ("HANUMAN", "ಹನುಮಕ್ಕ"), ("SHIVALINGAMMA", "ಶಿವಲಿಂಗಮ್"), ("ADITYA", "ಆದಿತ್ಯ"),
+    ("KAVYA", "ಕಾವ್ಯ"), ("CHAITANYA", "ಚೈತನ್ಯ"), ("SUSHEELA M", "ಎಂ.ಸುಶೀಲ"), ("ARUNA", "ಅರುಣ.ಎಲ್"), ("Praveen", "Praveena"),
+    ("NAIDU", "ನಾಯ್ಡು"), ("BEGUM", "ಬೇಗಂ"), ("THOMAS EDISON", "ಥಾಮಸ್ ಎಡಿಸನ್"), ("\x02RAMESH KUMAR", "Ramesh Kumar"),
+    ("RA\x02MESH", "Ramesh"), ("SANJAY K", "ಸಂಜಯ್ ಕೆ"), ("GANGAMMA", "ಗಂಗಮ್ಮ"), ("BASAVVA", "ಬಸವ್ವ"),
 ]
 
 GIVEN_M = ["ramesh", "suresh", "mahesh", "ganesh", "praveen", "manish", "anand", "venkatesh", "narayana",
@@ -279,6 +293,37 @@ def generated(rng: random.Random):
     return out
 
 
+# Common name words in Kannada with their usual English spelling, for mixed-script pairs.
+KANNADA = [("ರಮೇಶ್", "ramesh"), ("ಸುರೇಶ್", "suresh"), ("ಮಹೇಶ್", "mahesh"), ("ಗಣೇಶ್", "ganesh"), ("ಪ್ರವೀಣ್", "praveen"),
+           ("ಆನಂದ್", "anand"), ("ವೆಂಕಟೇಶ್", "venkatesh"), ("ನಾರಾಯಣ", "narayana"), ("ಕೃಷ್ಣ", "krishna"), ("ಗೋಪಾಲ್", "gopal"),
+           ("ನಾಗರಾಜ್", "nagaraj"), ("ಮಂಜುನಾಥ್", "manjunath"), ("ಬಸವರಾಜ್", "basavaraj"), ("ಮಲ್ಲಪ್ಪ", "mallappa"),
+           ("ಶ್ರೀನಿವಾಸ್", "srinivas"), ("ಪ್ರಕಾಶ್", "prakash"), ("ವಿನಯ", "vinay"), ("ಅರುಣ", "arun"), ("ಕಿರಣ್", "kiran"),
+           ("ಲಕ್ಷ್ಮಿ", "lakshmi"), ("ಸವಿತಾ", "savitha"), ("ಪದ್ಮಾವತಿ", "padmavathi"), ("ಪೂರ್ಣಿಮಾ", "poornima"), ("ಕಮಲ", "kamala"),
+           ("ಶಾರದಾ", "sharada"), ("ಅನಿತಾ", "anitha"), ("ಗೀತಾ", "geetha"), ("ರೇಖಾ", "rekha"), ("ಸೌಮ್ಯ", "sowmya"),
+           ("ಮಲ್ಲಮ್ಮ", "mallamma"), ("ಶಿವಮ್ಮ", "shivamma"), ("ಕುಮಾರ್", "kumar"), ("ರೆಡ್ಡಿ", "reddy"), ("ಗೌಡ", "gowda"),
+           ("ರಾವ್", "rao"), ("ಶೆಟ್ಟಿ", "shetty"), ("ನಾಯ್ಡು", "naidu"), ("ಶರ್ಮ", "sharma"), ("ಬೇಗಂ", "begum"), ("ಖಾನ್", "khan"),
+           ("ದ್ಯಾಸ್", "das"), ("ಹಂಸ", "hamsa"), ("ಜ್ಞಾನೇಶ್", "jnanesh"), ("ಪ್ರಜ್ಞಾ", "prajna"), ("ಶೈಲಜಾ", "shylaja")]
+KN_INITIALS = {"ಎಂ": "M", "ಎಸ್": "S", "ಕೆ": "K", "ಬಿ": "B", "ಆರ್": "R", "ಎನ್": "N", "ಟಿ": "T", "ಜಿ": "G"}
+
+
+def mixed(rng: random.Random):
+    """Mixed-script pairs: a name of 1 to 3 Kannada words against an English rendering of it (with
+    slips, other words or initials), or against a different name."""
+    out = []
+    for _ in range(MIXED):
+        words = rng.sample(KANNADA, rng.choice([1, 2, 2, 3]))
+        inits = rng.sample(sorted(KN_INITIALS), rng.choice([0, 0, 1, 2]))
+        kan = " ".join(inits + [k for k, _ in words])
+        if rng.random() < 0.7:
+            latin = [slip(rng, e) if rng.random() < 0.3 else e for _, e in words]
+        else:
+            latin = [e for _, e in rng.sample(KANNADA, len(words))]
+        eng = " ".join([KN_INITIALS[i] for i in inits if rng.random() < 0.8] + latin)
+        eng = eng.upper() if rng.random() < 0.5 else eng.title()
+        out.append((kan, eng) if rng.random() < 0.5 else (eng, kan))
+    return out
+
+
 def result(a: str, b: str, mode: str) -> dict:
     r = match(a, b, mode)
     return {"score": r.score, "band": r.band, "reasons": r.reasons, "left": r.left, "right": r.right,
@@ -288,7 +333,7 @@ def result(a: str, b: str, mode: str) -> dict:
 def cases() -> list[str]:
     rng = random.Random(SEED)
     lines = []
-    for a, b in HAND + generated(rng):
+    for a, b in HAND + generated(rng) + mixed(rng):
         for mode in MODES:
             lines.append(json.dumps({"a": a, "b": b, "owners": mode, "expected": result(a, b, mode)}, ensure_ascii=False))
     return lines

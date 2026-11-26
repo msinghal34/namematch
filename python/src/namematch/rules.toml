@@ -2,7 +2,7 @@
 # Changing this file changes scores: measure the change on labelled pairs and bump `version`.
 # The Python and Java libraries both read this file.
 
-version = "0.4.0"
+version = "0.5.0"
 
 # Titles dropped wherever they lead a person (repeatable: "Mr.Dr.", "Surg Lt Cdr").
 honorifics = [
@@ -147,4 +147,43 @@ groups = [
   ["builders", "bildars", "bildir", "bildirs", "bilders", "bildarsu"],
   ["estate", "estates", "estet"],
   ["developers", "developer", "developars", "divelapars"],
+]
+
+# Spellings of the same name seen across Kannada and English records (mined from the eAasthi
+# export 2026-11-25, each in many properties, then read by hand: near look-alikes that are different
+# names, such as verma / varma, nair / nayar, pal / paul (ಪಾಲ್), jan / john (ಜಾನ್) and rai / roy (ರಾಯ್), are left out). Used only with the switch mined_variants.
+mined_groups = [
+  ["rao", "raav"],
+  ["naidu", "naaydu", "naydu"],
+  ["nair", "naayar"],
+  ["naik", "nayak", "naayak", "naayka", "naayk", "nayaka"],
+  ["iyer", "aiyyar"],
+  ["john", "jon"],
+  ["thomas", "thaamas"],
+  ["george", "jaarj", "jorj"],
+  ["james", "jems", "jemes"],
+  ["david", "devid", "daavid"],
+  ["mary", "meree"],
+  ["peter", "peetar", "pitar"],
+  ["jose", "jos"],
+  ["jacob", "jekab", "jakob"],
+  ["johnson", "jaansan"],
+  ["wilson", "vilsan"],
+  ["varghese", "vargees", "varghees", "verghese"],
+  ["begum", "begam", "beegam"],
+  ["khanum", "khanam", "khaanam"],
+  ["kauser", "kausar", "kouser", "kousar", "kowsar"],
+  ["ahmed", "ahammad"],
+  ["syed", "saiyyad", "sayad"],
+  ["sheikh", "shekh"],
+  ["baig", "beg"],
+  ["shenoy", "shenai", "shenoi"],
+  ["menon", "menan"],
+  ["sunder", "sundar"],
+  ["khader", "khadar", "khaadar"],
+  ["chowdary", "chowdhury", "chaudhary", "chaudhari", "choudhary", "chaudari", "chowdhari"],
+  ["goel", "goyal"],
+  ["imtiaz", "imtiyaz", "imthiyaz"],
+  ["shamshad", "shamshaad"],
+  ["sheriff", "sharif", "shariff", "sherif"],
 ]

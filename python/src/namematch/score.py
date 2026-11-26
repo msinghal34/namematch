@@ -10,16 +10,30 @@ import math
 from dataclasses import dataclass, field
 
 from .parse import Organisation, ParsedName, Person, Token, parse
-from .phonetic import gender_conflict, initial_of, key, near_miss, similarity
-from .rules import TOKEN_FREQ
+from .phonetic import cross_gender_conflict, cross_similarity, cross_vowels_only, gender_conflict, initial_of, key, near_miss, similarity
+from .rules import TOKEN_FREQ, TOKEN_FREQ_EAASTHI, TOKEN_PERSONS, TOKEN_PERSONS_EAASTHI
 from .switches import ON
 
 MATCH_FLOOR = 0.70          # token similarity below this is "not the same word"
 NEAR_SIM = 0.75             # a near-miss word (one letter slip in a short name) when it is allowed
 NEAR_CAP = 0.64             # ... and the most such a pair can score: "needs a check", never accepted
-_PERSONS = TOKEN_FREQ.get("persons", 0)
-_MAX_FREQ = max((n for k, n in TOKEN_FREQ.items() if k != "persons"), default=1)
-_COMMON_FROM = 25
+# A part counts as common from 25 sightings per 153,218 persons: the sample the weights were tuned on.
+_COMMON_RATE = 25 / 153_218
+
+
+_TABLES = {}
+
+
+def _table():
+    """(counts, 'common' threshold, largest count) of the table the eaasthi_weights switch picks; worked
+    out once per table, not per word."""
+    use = bool(ON["eaasthi_weights"] and TOKEN_FREQ_EAASTHI)
+    if use not in _TABLES:
+        freq, persons = (TOKEN_FREQ_EAASTHI, TOKEN_PERSONS_EAASTHI) if use else (TOKEN_FREQ, TOKEN_PERSONS)
+        common = _COMMON_RATE * persons if persons else 25
+        _TABLES[use] = (freq, common, max(freq.values(), default=1))
+    return _TABLES[use]
+
 
 # Bands, calibrated on a labelled development set of name pairs.
 BANDS = [(0.80, "same"), (0.65, "likely_same"), (0.35, "review"), (0.0, "different")]
@@ -27,10 +41,11 @@ BANDS = [(0.80, "same"), (0.65, "likely_same"), (0.35, "review"), (0.0, "differe
 
 def weight(token: str) -> float:
     """1.0 for a distinctive word, down to 0.35 for the commonest (kumar)."""
-    n = TOKEN_FREQ.get(key(token), 0)
-    if n <= _COMMON_FROM:
+    freq, common, top = _table()
+    n = freq.get(key(token), 0)
+    if n <= common:
         return 1.0
-    return 1.0 - 0.65 * math.log(n / _COMMON_FROM) / math.log(_MAX_FREQ / _COMMON_FROM)
+    return 1.0 - 0.65 * math.log(n / common) / math.log(top / common)
 
 
 def _total(values) -> float:
@@ -67,6 +82,20 @@ class _Unit:
     idx: frozenset
     text: str
     w: float
+    kn: bool = False        # some word of it came from Kannada script
+
+
+def _similar(x: str, x_kn: bool, y: str, y_kn: bool) -> float:
+    """Word similarity; a Kannada-written word against an English-written one uses cross_similarity."""
+    if ON["cross_script"] and x_kn != y_kn:
+        return cross_similarity(x, y) if x_kn else cross_similarity(y, x)
+    return similarity(x, y)
+
+
+def _gender_clash(x: Token, y: Token) -> bool:
+    if ON["cross_script"] and x.kn != y.kn:
+        return cross_gender_conflict(x.text, y.text) if x.kn else cross_gender_conflict(y.text, x.text)
+    return gender_conflict(x.text, y.text)
 
 
 def _units(tokens: list[Token]) -> list[_Unit]:
@@ -76,11 +105,12 @@ def _units(tokens: list[Token]) -> list[_Unit]:
     for i, t in enumerate(tokens):
         if t.initial:
             continue
-        out.append(_Unit(frozenset([i]), t.text, weight(t.text)))
+        out.append(_Unit(frozenset([i]), t.text, weight(t.text), t.kn))
         for j in (i + 2, i + 3):
             run = tokens[i:j]
             if j <= n and all(not x.initial for x in run):
-                out.append(_Unit(frozenset(range(i, j)), "".join(x.text for x in run), max(weight(x.text) for x in run)))
+                out.append(_Unit(frozenset(range(i, j)), "".join(x.text for x in run), max(weight(x.text) for x in run),
+                                 any(x.kn for x in run)))
     return out
 
 
@@ -90,14 +120,20 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
     ua, ub = _units(a), _units(b)
     candidates = []
     near_pairs = set()
+    vowel_pairs = set()         # Kannada vs English words with only the vowels different (cross_vowels_only)
     for x in ua:
         for y in ub:
             if len(x.idx) > 1 and len(y.idx) > 1:
                 continue
-            s = similarity(x.text, y.text)
-            if s < MATCH_FLOOR and near and len(x.idx) == 1 and len(y.idx) == 1 and near_miss(x.text, y.text):
-                s = NEAR_SIM
-                near_pairs.add((x.text, y.text))
+            s = _similar(x.text, x.kn, y.text, y.kn)
+            if s < MATCH_FLOOR and near and len(x.idx) == 1 and len(y.idx) == 1:
+                if near_miss(x.text, y.text):
+                    s = NEAR_SIM
+                    near_pairs.add((x.text, y.text))
+                elif ON["cross_script"] and x.kn != y.kn and (
+                        cross_vowels_only(x.text, y.text) if x.kn else cross_vowels_only(y.text, x.text)):
+                    s = NEAR_SIM
+                    vowel_pairs.add((x.text, y.text))
             if s >= MATCH_FLOOR:
                 candidates.append((s, len(x.idx) + len(y.idx), x, y))
     candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
@@ -114,6 +150,8 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
         matched_w += w
         if (x.text, y.text) in near_pairs:
             reasons.append(f"{x.text}?{y.text} one letter apart")
+        elif (x.text, y.text) in vowel_pairs:
+            reasons.append(f"{x.text}?{y.text} vowels differ across scripts")
         elif x.text != y.text:
             reasons.append(f"{x.text}~{y.text} {s:.2f}")
 
@@ -176,7 +214,7 @@ def _score_tokens(a: list[Token], b: list[Token], rel_a: list[Token] = (), rel_b
                                                                   + [b[j].text.upper() for j in init_b]))
 
 
-    gender_clash = any(gender_conflict(a[i].text, b[j].text) for i in free_a for j in free_b)
+    gender_clash = any(_gender_clash(a[i], b[j]) for i in free_a for j in free_b)
     mass_a = _total(weight(a[i].text) for i in free_a)
     mass_b = _total(weight(b[j].text) for j in free_b)
     conflict = min(mass_a, mass_b) if free_a and free_b else 0.0
@@ -258,6 +296,8 @@ def person_score(p: Person, q: Person) -> tuple[float, list[str]]:
         s2 = min(s2, NEAR_CAP)
         if s2 > score and any("one letter apart" in r for r in r2):
             return s2, r2 + ["one-letter slip: needs a check"]
+        if s2 > score and any("vowels differ across scripts" in r for r in r2):
+            return s2, r2 + ["spelling across scripts: needs a check"]
     return score, reasons
 
 
